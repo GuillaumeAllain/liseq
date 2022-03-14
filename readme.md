@@ -4,7 +4,20 @@ Liseq is a s-expr to CODEV macro-plus transpiler. Since the scripting language f
 
 The s-expr syntax is loosely based on lisp. The project is still a rough work-in progress, so functionnality may drastically change in the future.
 
-# Quick documentation
+## Installation
+
+Clone and install with 
+
+```console
+foo@bar:liseq$ pip install .
+```
+or
+
+```console
+foo@bar:liseq$ pip install git+https://github.com/GuillaumeAllain/liseq.git
+```
+
+## Quick documentation
 
 ### Variable assigment
 
@@ -77,7 +90,7 @@ compile to
 vie;s1..3;lab n; go
 ```
 
-# TODO
+## TODO
 
 -   [ ] Documentation
 -   [ ] Function support
