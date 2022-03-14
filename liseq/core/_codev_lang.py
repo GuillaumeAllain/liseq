@@ -169,6 +169,8 @@ codev_builtin_func = [
     "cnvtfield"
     "cepsfile",
     "join",
+    "eofile",
+    "savedata"
 ]
 
 codev_macro_words = [

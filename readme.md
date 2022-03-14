@@ -6,16 +6,19 @@ The s-expr syntax is loosely based on lisp. The project is still a rough work-in
 
 ## Installation
 
-Clone and install with 
+Clone and install with
 
-```console
+``` console
 foo@bar:liseq$ pip install .
 ```
+
+
 or
 
-```console
+``` console
 foo@bar:liseq$ pip install git+https://github.com/GuillaumeAllain/liseq.git
 ```
+
 
 ## Quick documentation
 
@@ -33,6 +36,7 @@ lcl num ^foo
 ^foo == 10
 ```
 
+
 ### Function call
 
 ``` lisp
@@ -46,11 +50,13 @@ compiles to
 concat(^arg1, "arg2")
 ```
 
+
 ### If statement
 
-```{.lisp}
+``` lisp
 (if (== foobar 1) (wri "bar") (== foobar 2) (wri "barbar") (wri "barbarbar"))
 ```
+
 
 compiles to
 
@@ -64,31 +70,47 @@ else
 end if
 ```
 
+
 ### For loop
 
-```{.lisp}
+``` lisp
 (for [i 1 10 2] (wri "loop:" i))
 ```
 
+
 compiles to
 
-```{.code}
+``` code
 for ^i 1 10 2
     wri "loop:" ^i
 end for
 ```
 
+
+### database access
+
+``` lisp
+(eva x r1)
+```
+
+
+compiles to
+
+``` code
+(x r1)
+```
+
+
 ### Subprogram call (WIP)
 
-```{.lisp}
+``` lisp
 (vie s1..3 (lab n))
 ```
 
+
 compile to
 
-```
-vie;s1..3;lab n; go
-```
+    vie;s1..3;lab n; go
 
 ## TODO
 

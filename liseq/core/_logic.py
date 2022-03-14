@@ -4,30 +4,12 @@ __version__ = "1.0"
 
 from pyparsing.helpers import nested_expr, alphas
 from re import sub, compile, findall
-from liseq.codev_lang import codev_builtin_func, codev_macro_words
+from ._codev_lang import codev_builtin_func, codev_macro_words
 from copy import copy
-import argparse
-
-
-parser = argparse.ArgumentParser(
-    description="Transpile s-exp to macro-plus CODEV language."
-)
-
-parser.add_argument("filename", type=str, help="Input filename (Required)")
-
-parser.add_argument(
-    "-o",
-    "--output",
-    type=str,
-    help="Output file location. Default: output to terminal",
-    default=None,
-)
-
-args = parser.parse_args()
 
 
 fun_words = ["vie", "fie", "fma", "mtf"]
-loop_words = ["for", "while"]
+loop_words = ["for", "while", "unt"]
 arith_words = ["+", "-", "*", "**", "/", "==", ">", "<", "~=", "not=", "and", "or"]
 arith_trans = {}
 for words in arith_words:
@@ -79,7 +61,7 @@ def list2codev(exp_input, indent=0):
     pre = indent_whitespace(indent)
     if isinstance(exp, str):
         if parse_var(exp):
-            return f"^{exp.lower()}"
+            return exp if exp.startswith("^") else f"^{exp}"
         else:
             if exp.startswith(":"):
                 return f'"{exp[1:]}"'
@@ -94,19 +76,25 @@ def list2codev(exp_input, indent=0):
         if len(exp) < 2:
             raise SyntaxError("Cannot parse loop")
         join = "\n"
-        close = f"\nend {exp[0]}"
+        close = f"\n{indent_whitespace(indent)}end {exp[0]}"
         if exp[0] == "for":
             if not isinstance(exp[1], list) or len(exp[1]) < 3:
                 raise SyntaxError("Cannot parse for loop init")
             start = f"{list2codev(exp[0])} {list2codev(exp[1][0])} {list2codev(exp[1][1:])}\n"
         elif exp[0] == "while":
             start = f"{list2codev(exp[0])} {list2codev(exp[1])}\n"
+        elif exp[0] == "unt":
+            start = f"{list2codev(exp[0])}\n"
+            close += f" {exp[1]}"
         exp.pop(0)
         exp.pop(0)
         indent += 1
     elif exp[0] == "if":
-        if len(exp) < 3:
+        if len(exp) < 2:
             raise SyntaxError("Cannot parse if")
+        if len(exp) == 2:
+            return f"if {list2codev(exp[1])}\n{indent_whitespace(indent)}end if"
+
         if len(exp) % 2:
             return (
                 f"if {list2codev(exp[1])}\n{indent_whitespace(indent+1)}{list2codev(exp[2], indent=indent+1)}\n"
@@ -118,7 +106,7 @@ def list2codev(exp_input, indent=0):
                         + list2codev(x[0])
                         + "\n"
                         + indent_whitespace(indent + 1)
-                        + list2codev(x[1], indent=indent)
+                        + list2codev(x[1], indent=indent + 1)
                         + "\n"
                         for x in zip(exp[3::2], exp[4::2])
                     ]
@@ -467,36 +455,20 @@ def move_def_to_top(program_input):
         else ""
     )
     definitions += (
-        f"lcl num {' '.join(set([x.split()[2] for x in num_def]))}"
+        f"lcl num {' '.join(set([x.split()[2] for x in num_def]))}\n"
         if len(num_def) > 0
         else ""
     )
 
-    program = f"""{definitions}\n{lclnum.sub("", lclstr.sub("", program))}"""
+    program = f"""{definitions}{lclnum.sub("", lclstr.sub("", program))}"""
     return sub("\n\s*\n", "\n", program)
 
 
-def transpiler(ast_list):
-    # ast = nested_expr().parseString(f"({program})")[0].asList()
-    return move_def_to_top(expand_macro(list2codev(ast_list)))
-
-
-def main():
-    with open(args.filename, "r") as file:
-        program = file.read()
+def transpiler(program):
     program = "\n".join(
         [x for x in program.split("\n") if not x.lstrip().startswith(";")]
     )
     program = sub(r"\[", r"(", program)
     program = sub(r"]", ")", program)
     ast = nested_expr().parseString(f"({program})")[0].asList()
-    output_string = transpiler(ast)
-    if args.output is not None:
-        with open(args.output, "w") as file:
-            file.write(output_string)
-    else:
-        print(output_string)
-
-
-if __name__ == "__main__":
-    main()
+    return move_def_to_top(expand_macro(list2codev(ast)))
