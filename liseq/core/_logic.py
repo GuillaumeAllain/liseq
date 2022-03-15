@@ -28,6 +28,7 @@ for words in arith_words:
     arith_trans[words] = words
 arith_trans["=="] = "="
 arith_trans["from"] = ".."
+arith_trans["to"] = ".."
 arith_trans.update(dict.fromkeys(["~=", "not="], "<>"))
 other_keys = ["yes", "no", "n", "y", "true", "false", "if", "else"]
 definitions = ["local", "global", "num", "char"]
@@ -81,6 +82,9 @@ def list2codev(exp_input, indent=0):
             else:
                 return exp
     elif isinstance(exp[0], list):
+        if len(exp[0]) >= 3 and exp[0][0] == "." and exp[0][1] == "num":
+            exp.insert(0, "num")
+            return (list2codev(exp))
         join = "\n\n"
     elif exp[0] in fun_words:
         join = ";"
@@ -102,6 +106,19 @@ def list2codev(exp_input, indent=0):
         exp.pop(0)
         exp.pop(0)
         indent += 1
+    elif exp[0] == "fct":
+        if len(exp) < 5:
+            raise SyntaxError("Cannot parse function")
+        # TODO: Check if args are definitions
+        start = f"{indent_whitespace(indent)}fct @{exp[1]}({', '.join([list2codev(x) for x in exp[2]])})\n"
+        join = "\n"
+        close = f"\n{indent_whitespace(indent)}end fct {list2codev(exp[4])}"
+        exp.pop(0)
+        exp.pop(0)
+        exp.pop(0)
+        exp.pop(-1)
+        indent += 1
+
     elif exp[0] == "if":
         if len(exp) < 2:
             raise SyntaxError("Cannot parse if")
@@ -192,12 +209,18 @@ def list2codev(exp_input, indent=0):
         close = list2codev(exp)
         exp = []
 
-    elif exp[0] in ("local", "global"):
+    elif exp[0] in ("num", "local", "global"):
         start = f"{exp[0].replace('global', 'gbl').replace('local', 'lcl')} "
-        var_size = 0 if isinstance(exp[1], str) else ",".join(exp[1][2:])
+        if not isinstance(exp[1], str) and len(exp[1])>=3 and exp[1][1] == "num":
+            var_size = ','.join(exp[1][2:])
+        else:
+            var_size = 0
         if var_size != 0:
-            exp[1] = exp[1][1]
             exp[2:] = [f"{x}({var_size})" for x in exp[2:]]
+            if exp[0] == "num":
+                exp.pop(0)
+            else:
+                exp[1] = exp[1][1]
         exp.pop(0)
 
     elif exp[0] in (alphas):
@@ -205,6 +228,9 @@ def list2codev(exp_input, indent=0):
             raise SyntaxError("Buffer or Surface call error")
         if len(exp[1]) == 1:
             return f"{list2codev(exp[0]+exp[1])}"
+        elif len(exp[1]) == 3 and exp[1][0] in arith_trans.keys():
+            exp[1].append(0)
+            return f"{exp[0]}{list2codev(exp[1])}"
         else:
             return f"{exp[0]}{list2codev(exp[1])}"
 
@@ -245,7 +271,10 @@ def list2codev(exp_input, indent=0):
             dist = int(exp[3])
             exp.pop(3)
         else:
-            dist = 1
+            if arith_trans[exp[0]] == "..":
+                dist = 0
+            else:
+                dist = 1
         parentflag1 = ["", ""] if isinstance(exp[1], str) else "()"
         parentflag2 = ["", ""] if isinstance(exp[2], str) else "()"
         return f"{parentflag1[0]}{list2codev(exp[1],indent=0) if not isinstance(exp[1],str) or not attr_match(exp[1]) else exp[1]}{parentflag1[1]}{' '*dist}{arith_trans[exp[0]]}{' '*dist}{parentflag2[0]}{list2codev(exp[2],indent=0) if not isinstance(exp[2],str) or not attr_match(exp[2]) else exp[2]}{parentflag2[1]}"
@@ -287,7 +316,7 @@ def expand_macro(program_input):
                         "buf",
                         "put",
                         ["b", "bparsesyntax"],
-                        ["i", ["+", "l", "1", "0"]],
+                        ["i", ["+", "l", "1"]],
                         ["j", "1"],
                         f'''"syntax: {parse_func_name} {' '.join([f'[{x}]' for x in parse_inputs[2]])} <----- uses text qualifiers entered in any order"''',
                     ],
@@ -295,7 +324,7 @@ def expand_macro(program_input):
                         "buf",
                         "put",
                         ["b", "bparsesyntax"],
-                        ["i", ["+", "l", "1", "0"]],
+                        ["i", ["+", "l", "1"]],
                         ["j", "1"],
                         '"      - or - "',
                     ],
@@ -303,7 +332,7 @@ def expand_macro(program_input):
                         "buf",
                         "put",
                         ["b", "bparsesyntax"],
-                        ["i", ["+", "l", "1", "0"]],
+                        ["i", ["+", "l", "1"]],
                         ["j", "1"],
                         f'''"syntax: {parse_func_name} {' '.join(parse_inputs[2])} <----- uses numeric inputs in this order only "''',
                     ],
@@ -315,7 +344,14 @@ def expand_macro(program_input):
                             "buf",
                             "put",
                             ["b", "bparseinput"],
-                            ["i", ["+", "l", "1", "0"]],
+                            [
+                                "i",
+                                [
+                                    "+",
+                                    "l",
+                                    "1",
+                                ],
+                            ],
                             [".", "rfstr", "input"],
                         ],
                     ],
@@ -447,7 +483,14 @@ def expand_macro(program_input):
                         "buf",
                         "put",
                         ["b", r"\1"],
-                        ["i", ["+", "l", "1", "0"]],
+                        [
+                            "i",
+                            [
+                                "+",
+                                "l",
+                                "1",
+                            ],
+                        ],
                         ":placeover",
                     ],
                 ]
