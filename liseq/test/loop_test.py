@@ -82,5 +82,22 @@ class Loop_test(unittest.TestCase):
             ),
         )
 
+    def test_function(self):
+        self.assertEqual(
+            "fct @test(num ^arg1)\n" "end fct ^outputvar",
+            transpiler("(fct test (num arg1) () (outputvar))"),
+        )
+        self.assertEqual(
+            "fct @test(num ^arg1(3,4), str ^arg2(3))\n" "end fct ^outputvar",
+            transpiler(
+                "(fct test (((. num 3 4) arg1)((. str 3) arg2)) () (outputvar))"
+            ),
+        )
+        self.assertEqual(
+            "fct @test(num ^arg1(10), str ^arg2(3))\n""    wri 3\n    (x r1 s1)\n" "end fct ^outputvar",
+            transpiler("(fct test ((num (. arg1 10))((. str 3) arg2)) ((wri 3)(eva x r1 s1)) (outputvar))"),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -73,7 +73,9 @@ def list2codev(exp_input, indent=0):
     close = ""
     join = " "
     pre = indent_whitespace(indent)
-    if isinstance(exp, str):
+    if len(exp) == 0:
+        return ""
+    elif isinstance(exp, str):
         if parse_var(exp):
             return exp if exp.startswith("^") else f"^{exp}"
         else:
@@ -82,9 +84,9 @@ def list2codev(exp_input, indent=0):
             else:
                 return exp
     elif isinstance(exp[0], list):
-        if len(exp[0]) >= 3 and exp[0][0] == "." and exp[0][1] == "num":
-            exp.insert(0, "num")
-            return (list2codev(exp))
+        if len(exp[0]) >= 3 and exp[0][0] == "." and exp[0][1] in ["num", "str"]:
+            exp.insert(0, exp[0][1])
+            return list2codev(exp)
         join = "\n\n"
     elif exp[0] in fun_words:
         join = ";"
@@ -109,8 +111,12 @@ def list2codev(exp_input, indent=0):
     elif exp[0] == "fct":
         if len(exp) < 5:
             raise SyntaxError("Cannot parse function")
-        # TODO: Check if args are definitions
-        start = f"{indent_whitespace(indent)}fct @{exp[1]}({', '.join([list2codev(x) for x in exp[2]])})\n"
+        args = (
+            ", ".join([list2codev(x) for x in exp[2]])
+            if isinstance(exp[2][0], list)
+            else list2codev(exp[2])
+        )
+        start = f"{indent_whitespace(indent)}fct @{exp[1]}({args})\n"
         join = "\n"
         close = f"\n{indent_whitespace(indent)}end fct {list2codev(exp[4])}"
         exp.pop(0)
@@ -209,15 +215,15 @@ def list2codev(exp_input, indent=0):
         close = list2codev(exp)
         exp = []
 
-    elif exp[0] in ("num", "local", "global"):
+    elif exp[0] in ("num", "str", "local", "global"):
         start = f"{exp[0].replace('global', 'gbl').replace('local', 'lcl')} "
-        if not isinstance(exp[1], str) and len(exp[1])>=3 and exp[1][1] == "num":
-            var_size = ','.join(exp[1][2:])
+        if not isinstance(exp[1], str) and len(exp[1]) >= 3 and exp[1][1] in ["num", "str"]:
+            var_size = ",".join(exp[1][2:])
         else:
             var_size = 0
         if var_size != 0:
             exp[2:] = [f"{x}({var_size})" for x in exp[2:]]
-            if exp[0] == "num":
+            if exp[0] in ["num", "str"]:
                 exp.pop(0)
             else:
                 exp[1] = exp[1][1]
