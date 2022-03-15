@@ -2,7 +2,7 @@ import unittest
 from liseq.core import transpiler
 
 
-class Loop(unittest.TestCase):
+class Loop_test(unittest.TestCase):
     def test_if_1arg(self):
         self.assertEqual("if foo = 3\nend if", transpiler("(if (== foo 3))"))
 

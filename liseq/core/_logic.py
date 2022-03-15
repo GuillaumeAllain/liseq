@@ -1,16 +1,28 @@
-#! usr/bin/env python
-
 __version__ = "1.0"
 
 from pyparsing.helpers import nested_expr, alphas
-from re import sub, compile, findall
+from re import sub, compile, findall, MULTILINE
 from ._codev_lang import codev_builtin_func, codev_macro_words
 from copy import copy
 
 
 fun_words = ["vie", "fie", "fma", "mtf"]
 loop_words = ["for", "while", "unt"]
-arith_words = ["+", "-", "*", "**", "/", "==", ">", "<", "~=", "not=", "and", "or"]
+arith_words = [
+    "..",
+    "+",
+    "-",
+    "*",
+    "**",
+    "/",
+    "==",
+    ">",
+    "<",
+    "~=",
+    "not=",
+    "and",
+    "or",
+]
 arith_trans = {}
 for words in arith_words:
     arith_trans[words] = words
@@ -30,6 +42,7 @@ keywords = (
     + definitions
 )
 ldm_match = lambda exp: bool(compile(r"[abcefgijlqrstuwz][\dacilos]\b").match(exp))
+attr_match = lambda exp: bool(compile(r"[\dacilos]\b").match(exp))
 buf_func_match = lambda exp: bool(compile(r"buf\..*").match(exp))
 codev_func_match = lambda exp: bool(compile(r"codev\..*").match(exp))
 string_match = lambda exp: not exp == exp.replace('"', "") or exp.startswith(":")
@@ -143,6 +156,14 @@ def list2codev(exp_input, indent=0):
         join = ","
         close = ")"
         exp.pop(0)
+    elif exp[0] == "fctcall":
+        if len(exp[0]) < 2:
+            raise SyntaxError("Cannot parse function call")
+        start = f"@{exp[1]}("
+        join = ","
+        close = ")"
+        exp.pop(0)
+        exp.pop(0)
     elif exp[0] == ".":
         # table_lookup
         if len(exp) < 3:
@@ -173,12 +194,19 @@ def list2codev(exp_input, indent=0):
 
     elif exp[0] in ("local", "global"):
         start = f"{exp[0].replace('global', 'gbl').replace('local', 'lcl')} "
+        var_size = 0 if isinstance(exp[1], str) else ",".join(exp[1][2:])
+        if var_size != 0:
+            exp[1] = exp[1][1]
+            exp[2:] = [f"{x}({var_size})" for x in exp[2:]]
         exp.pop(0)
 
     elif exp[0] in (alphas):
         if len(exp) != 2 and parse_var(exp[1]):
             raise SyntaxError("Buffer or Surface call error")
-        return f"{exp[0]}{list2codev(exp[1])}"
+        if len(exp[1]) == 1:
+            return f"{list2codev(exp[0]+exp[1])}"
+        else:
+            return f"{exp[0]}{list2codev(exp[1])}"
 
     elif exp[0] == "var":
         if len(exp) not in (3, 4):
@@ -188,14 +216,20 @@ def list2codev(exp_input, indent=0):
         var_type = (
             (exp[1] if isinstance(exp[1], str) else exp[1][1]) if len(exp) == 4 else ""
         )
-        var_size = (0 if isinstance(exp[1], str) else exp[1][2]) if len(exp) == 4 else 0
+        var_size = (
+            (0 if isinstance(exp[1], str) else " ".join(exp[1][2:]))
+            if len(exp) == 4
+            else 0
+        )
         if var_type != "":
             assign = (
                 list2codev(
                     [
                         "local",
                         var_type,
-                        var_name if var_size == 0 else [".", var_name, var_size],
+                        var_name
+                        if var_size == 0
+                        else [".", var_name, *var_size.split(" ")],
                     ]
                 )
                 + "\n"
@@ -205,13 +239,21 @@ def list2codev(exp_input, indent=0):
             assign = ""
         return f"{assign}{list2codev(exp[-2])} == {list2codev(exp[-1])}"
     elif exp[0] in arith_trans.keys():
-        if len(exp) != 3 or exp[0] not in arith_trans.keys():
+        if len(exp) not in (3, 4) or exp[0] not in arith_trans.keys():
             raise SyntaxError("Cannot parse lisp comparison")
-        return f"{list2codev(exp[1],indent=0)} {arith_trans[exp[0]]} {list2codev(exp[2],indent=0)}"
+        if len(exp) == 4:
+            dist = int(exp[3])
+            exp.pop(3)
+        else:
+            dist = 1
+        parentflag1 = ["", ""] if isinstance(exp[1], str) else "()"
+        parentflag2 = ["", ""] if isinstance(exp[2], str) else "()"
+        return f"{parentflag1[0]}{list2codev(exp[1],indent=0) if not isinstance(exp[1],str) or not attr_match(exp[1]) else exp[1]}{parentflag1[1]}{' '*dist}{arith_trans[exp[0]]}{' '*dist}{parentflag2[0]}{list2codev(exp[2],indent=0) if not isinstance(exp[2],str) or not attr_match(exp[2]) else exp[2]}{parentflag2[1]}"
     pre = "    ".join(["" for x in range(indent + 1)])
 
     # surface_fnl_call
-    exp_up = [x[1:] if isinstance(x, str) and x[:2].lower() == ":s" else x for x in exp]
+    # exp_up = [x[1:] if isinstance(x, str) and x[:2].lower() == ":s" else x for x in exp]
+    exp_up = exp
     # resolve_subcalls
     if "\n" not in join:
         pre = ""
@@ -245,7 +287,7 @@ def expand_macro(program_input):
                         "buf",
                         "put",
                         ["b", "bparsesyntax"],
-                        "il+1",
+                        ["i", ["+", "l", "1", "0"]],
                         ["j", "1"],
                         f'''"syntax: {parse_func_name} {' '.join([f'[{x}]' for x in parse_inputs[2]])} <----- uses text qualifiers entered in any order"''',
                     ],
@@ -253,7 +295,7 @@ def expand_macro(program_input):
                         "buf",
                         "put",
                         ["b", "bparsesyntax"],
-                        "il+1",
+                        ["i", ["+", "l", "1", "0"]],
                         ["j", "1"],
                         '"      - or - "',
                     ],
@@ -261,7 +303,7 @@ def expand_macro(program_input):
                         "buf",
                         "put",
                         ["b", "bparsesyntax"],
-                        "il+1",
+                        ["i", ["+", "l", "1", "0"]],
                         ["j", "1"],
                         f'''"syntax: {parse_func_name} {' '.join(parse_inputs[2])} <----- uses numeric inputs in this order only "''',
                     ],
@@ -273,7 +315,7 @@ def expand_macro(program_input):
                             "buf",
                             "put",
                             ["b", "bparseinput"],
-                            "il+1",
+                            ["i", ["+", "l", "1", "0"]],
                             [".", "rfstr", "input"],
                         ],
                     ],
@@ -391,44 +433,51 @@ def expand_macro(program_input):
     program_start = copy(program)
 
     buf_empty_macro = compile(r"buf.emp.find\s\^(.*)")
-    program = buf_empty_macro.sub(
-        list2codev(
-            [
-                ["var", "num", r"\1", "1"],
+    if len(buf_empty_macro.findall(program)) > 0:
+        program = buf_empty_macro.sub(
+            list2codev(
                 [
-                    "while",
-                    ["not", ["buf.emp", ["b", r"\1"]]],
-                    ["var", r"\1", ["+", r"\1", "1"]],
-                ],
-                ["buf", "put", ["b", r"\1"], "il+1", ":placeover"],
-            ]
-        ),
-        program,
-    )
-
+                    ["var", "num", r"\1", "1"],
+                    [
+                        "while",
+                        ["not", ["buf.emp", ["b", r"\1"]]],
+                        ["var", r"\1", ["+", r"\1", "1"]],
+                    ],
+                    [
+                        "buf",
+                        "put",
+                        ["b", r"\1"],
+                        ["i", ["+", "l", "1", "0"]],
+                        ":placeover",
+                    ],
+                ]
+            ),
+            program,
+        )
     codev_supress_macro = compile(r"codev\.supressoutput.*")
-    program = codev_supress_macro.sub(
-        list2codev(
-            [
+    if len(codev_supress_macro.findall(program)) > 0:
+        program = codev_supress_macro.sub(
+            list2codev(
                 [
-                    "if",
-                    ["eva", "out"],
-                    ["var", "str", "origoutsetting", '"y"'],
-                    ["var", "origoutsetting", '"n"'],
-                ],
-                ["var", "str", "outvar", '"n"'],
-                ["out", "outvar"],
-                [
-                    "if",
-                    ["eva", "ver"],
-                    ["var", "str", "origverSetting", '"y"'],
-                    ["var", "origversetting", '"n"'],
-                ],
-                ["ver", "n"],
-            ]
-        ),
-        program,
-    )
+                    [
+                        "if",
+                        ["eva", "out"],
+                        ["var", "str", "origoutsetting", '"y"'],
+                        ["var", "origoutsetting", '"n"'],
+                    ],
+                    ["var", "str", "outvar", '"n"'],
+                    ["out", "outvar"],
+                    [
+                        "if",
+                        ["eva", "ver"],
+                        ["var", "str", "origverSetting", '"y"'],
+                        ["var", "origversetting", '"n"'],
+                    ],
+                    ["ver", "n"],
+                ]
+            ),
+            program,
+        )
 
     lblend = f"{';'.join([list2codev(['buf', 'del', ['b', x]]) for x in buf_empty_macro.findall(program_start)])}"
     if codev_supress_macro.findall(program_start) != []:
@@ -450,18 +499,18 @@ def move_def_to_top(program_input):
     str_def = lclstr.findall(program)
     num_def = lclnum.findall(program)
     definitions = (
-        f"lcl str {' '.join(set([x.split()[2] for x in str_def]))}\n"
+        f"lcl str {' '.join(set([y for x in str_def for y in x.split()[2:]]))}\n"
         if len(str_def) > 0
         else ""
     )
     definitions += (
-        f"lcl num {' '.join(set([x.split()[2] for x in num_def]))}\n"
+        f"lcl num {' '.join(set([y for x in num_def for y in x.split()[2:]]))}\n"
         if len(num_def) > 0
         else ""
     )
 
     program = f"""{definitions}{lclnum.sub("", lclstr.sub("", program))}"""
-    return sub("\n\s*\n", "\n", program)
+    return sub("\n$", "", sub("\n\s*\n", "\n", program), MULTILINE)
 
 
 def transpiler(program):
