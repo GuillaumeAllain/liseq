@@ -22,6 +22,18 @@ foo@bar:liseq$ pip install git+https://github.com/GuillaumeAllain/liseq.git
 
 ## Quick documentation
 
+The main command for calling the transpiler on a file:
+
+```
+liseq file.liseq -o file.seq
+```
+
+Without specifying the `-o` option, the compiled *.seq file will be printed on stdout. The transpiler is also available from python by 
+
+``` python
+from liseq.core import transpiler
+```
+
 ### Variable assigment
 
 ``` lisp
