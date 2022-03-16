@@ -4,12 +4,12 @@ from liseq.core import transpiler
 
 class Language_test(unittest.TestCase):
     def test_var_attribution_simple(self):
-        self.assertEqual("^foovar == 3", transpiler("(var foovar 3)"))
+        self.assertEqual("^foovar == 3", transpiler("(set foovar 3)"))
 
     def test_var_attribution_complex(self):
         self.assertEqual(
             "^foovar == (^barvar + 3) / 3",
-            transpiler("(var foovar (/ (+ barvar 3) 3))"),
+            transpiler("(set foovar (/ (+ barvar 3) 3))"),
         )
 
     def test_database(self):
@@ -102,6 +102,9 @@ class Language_test(unittest.TestCase):
         self.assertEqual('@foovar("oui")', transpiler('(fctcall foovar "oui")'))
         self.assertEqual('concat(^foovar,"oui")', transpiler('(concat foovar "oui")'))
         self.assertEqual("3", transpiler("(3)"))
+
+    def test_var(self):
+        pass
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 __version__ = "1.0"
 
 from pyparsing.helpers import nested_expr, alphas
-from re import sub, compile, findall, MULTILINE
+from re import sub, compile, findall, search, escape, MULTILINE
 from ._codev_lang import codev_builtin_func, codev_macro_words
 from copy import copy
 
@@ -67,7 +67,7 @@ def indent_whitespace(number):
     return "    ".join(["" for x in range(number + 1)])
 
 
-def list2codev(exp_input, indent=0):
+def list2codev(exp_input, indent=0, scope="lcl"):
     exp = copy(exp_input)
     start = ""
     close = ""
@@ -86,7 +86,7 @@ def list2codev(exp_input, indent=0):
     elif isinstance(exp[0], list):
         if len(exp[0]) >= 3 and exp[0][0] == "." and exp[0][1] in ["num", "str"]:
             exp.insert(0, exp[0][1])
-            return list2codev(exp)
+            return list2codev(exp, scope=scope)
         join = "\n\n"
     elif exp[0] in fun_words:
         join = ";"
@@ -99,50 +99,53 @@ def list2codev(exp_input, indent=0):
         if exp[0] == "for":
             if not isinstance(exp[1], list) or len(exp[1]) < 3:
                 raise SyntaxError("Cannot parse for loop init")
-            start = f"{list2codev(exp[0])} {list2codev(exp[1][0])} {list2codev(exp[1][1:])}\n"
+            start = f"{list2codev(exp[0],scope=scope)} {list2codev(exp[1][0],scope=scope)} {list2codev(exp[1][1:],scope=scope)}\n"
         elif exp[0] == "while":
-            start = f"{list2codev(exp[0])} {list2codev(exp[1])}\n"
+            start = (
+                f"{list2codev(exp[0],scope=scope)} {list2codev(exp[1],scope=scope)}\n"
+            )
         elif exp[0] == "unt":
-            start = f"{list2codev(exp[0])}\n"
+            start = f"{list2codev(exp[0],scope=scope)}\n"
             close += f" {exp[1]}"
         exp.pop(0)
         exp.pop(0)
         indent += 1
-    elif exp[0] == "fct":
+    elif exp[0] in ["fct", "fn"]:
         if len(exp) < 5:
             raise SyntaxError("Cannot parse function")
         args = (
-            ", ".join([list2codev(x) for x in exp[2]])
+            ", ".join([list2codev(x, scope=scope) for x in exp[2]])
             if isinstance(exp[2][0], list)
-            else list2codev(exp[2])
+            else list2codev(exp[2], scope=scope)
         )
         start = f"{indent_whitespace(indent)}fct @{exp[1]}({args})\n"
         join = "\n"
-        close = f"\n{indent_whitespace(indent)}end fct {list2codev(exp[4])}"
+        close = f"\n{indent_whitespace(indent)}end fct {list2codev(exp[4],scope=scope)}"
         exp.pop(0)
         exp.pop(0)
         exp.pop(0)
         exp.pop(-1)
         indent += 1
+        scope = "fctlcl"
 
     elif exp[0] == "if":
         if len(exp) < 2:
             raise SyntaxError("Cannot parse if")
         if len(exp) == 2:
-            return f"if {list2codev(exp[1])}\n{indent_whitespace(indent)}end if"
+            return f"if {list2codev(exp[1],scope=scope)}\n{indent_whitespace(indent)}end if"
 
         if len(exp) % 2:
             return (
-                f"if {list2codev(exp[1])}\n{indent_whitespace(indent+1)}{list2codev(exp[2], indent=indent+1)}\n"
+                f"if {list2codev(exp[1],scope=scope)}\n{indent_whitespace(indent+1)}{list2codev(exp[2], indent=indent+1,scope=scope)}\n"
                 # + "\n".join(exp[2])
                 + "\n".join(
                     [
                         indent_whitespace(indent)
                         + "else if "
-                        + list2codev(x[0])
+                        + list2codev(x[0], scope=scope)
                         + "\n"
                         + indent_whitespace(indent + 1)
-                        + list2codev(x[1], indent=indent + 1)
+                        + list2codev(x[1], indent=indent + 1, scope=scope)
                         + "\n"
                         for x in zip(exp[3::2], exp[4::2])
                     ]
@@ -151,35 +154,35 @@ def list2codev(exp_input, indent=0):
             )
         elif not len(exp) % 2:
             return (
-                f"if {list2codev(exp[1])}\n{indent_whitespace(indent+1)}{list2codev(exp[2],indent+1)}\n"
+                f"if {list2codev(exp[1],scope=scope)}\n{indent_whitespace(indent+1)}{list2codev(exp[2],indent+1,scope=scope)}\n"
                 + "\n".join(
                     [
                         indent_whitespace(indent)
                         + "else if "
-                        + list2codev(x[0])
+                        + list2codev(x[0], scope=scope)
                         + "\n"
                         + indent_whitespace(indent + 1)
-                        + list2codev(x[1], indent=indent + 1)
+                        + list2codev(x[1], indent=indent + 1, scope=scope)
                         + "\n"
                         for x in zip(exp[3::2], exp[4::2])
                     ]
                 )
                 + (
-                    f"{indent_whitespace(indent)}else\n{indent_whitespace(indent+1)}{list2codev(exp[-1], indent=indent+1)}\n"
+                    f"{indent_whitespace(indent)}else\n{indent_whitespace(indent+1)}{list2codev(exp[-1], indent=indent+1,scope=scope)}\n"
                 )
                 + f"{indent_whitespace(indent)}end if"
             )
     # elif exp[0] == "else":
     #     pass
 
-    elif exp[0] in codev_builtin_func:
+    elif exp[0].lower() in codev_builtin_func:
         if len(exp[0]) < 2:
             raise SyntaxError("Cannot parse function call")
-        start = f"{list2codev(exp[0])}("
+        start = f"{list2codev(exp[0],scope=scope)}("
         join = ","
         close = ")"
         exp.pop(0)
-    elif exp[0] == "fctcall":
+    elif exp[0] in ["fctcall"]:
         if len(exp[0]) < 2:
             raise SyntaxError("Cannot parse function call")
         start = f"@{exp[1]}("
@@ -191,14 +194,16 @@ def list2codev(exp_input, indent=0):
         # table_lookup
         if len(exp) < 3:
             raise SyntaxError("Cannot parse table lookup")
-        start = f"{list2codev(exp[1])}("
+        start = f"{list2codev(exp[1],scope=scope)}("
         join = ","
         close = ")"
         exp.pop(0)
         exp.pop(0)
     elif exp[0] == "eva":
         # database lookup
-        return f'({" ".join([list2codev(exp[x]) for x in range(1,len(exp))])})'
+        return (
+            f'({" ".join([list2codev(exp[x],scope=scope) for x in range(1,len(exp))])})'
+        )
     elif exp[0] == "not":
         start = "not("
         close = ")"
@@ -212,12 +217,16 @@ def list2codev(exp_input, indent=0):
     elif "dro" in exp[0]:
         start = f"{exp[0].replace('drop','dro')} "
         exp.pop(0)
-        close = list2codev(exp)
+        close = list2codev(exp, scope=scope)
         exp = []
 
     elif exp[0] in ("num", "str", "local", "global"):
-        start = f"{exp[0].replace('global', 'gbl').replace('local', 'lcl')} "
-        if not isinstance(exp[1], str) and len(exp[1]) >= 3 and exp[1][1] in ["num", "str"]:
+        start = f"{exp[0].replace('global', 'gbl').replace('local', scope)} "
+        if (
+            not isinstance(exp[1], str)
+            and len(exp[1]) >= 3
+            and exp[1][1] in ["num", "str"]
+        ):
             var_size = ",".join(exp[1][2:])
         else:
             var_size = 0
@@ -233,43 +242,49 @@ def list2codev(exp_input, indent=0):
         if len(exp) != 2 and parse_var(exp[1]):
             raise SyntaxError("Buffer or Surface call error")
         if len(exp[1]) == 1:
-            return f"{list2codev(exp[0]+exp[1])}"
+            return f"{list2codev(exp[0]+exp[1],scope=scope)}"
         elif len(exp[1]) == 3 and exp[1][0] in arith_trans.keys():
             exp[1].append(0)
-            return f"{exp[0]}{list2codev(exp[1])}"
+            return f"{exp[0]}{list2codev(exp[1],scope=scope)}"
         else:
-            return f"{exp[0]}{list2codev(exp[1])}"
+            return f"{exp[0]}{list2codev(exp[1],scope=scope)}"
 
-    elif exp[0] == "var":
-        if len(exp) not in (3, 4):
-            raise SyntaxError("Cannot parse var assignation")
-
-        var_name = exp[-2] if isinstance(exp[-2], str) else exp[-2][1]
-        var_type = (
-            (exp[1] if isinstance(exp[1], str) else exp[1][1]) if len(exp) == 4 else ""
-        )
-        var_size = (
-            (0 if isinstance(exp[1], str) else " ".join(exp[1][2:]))
-            if len(exp) == 4
-            else 0
-        )
-        if var_type != "":
-            assign = (
-                list2codev(
-                    [
-                        "local",
-                        var_type,
-                        var_name
-                        if var_size == 0
-                        else [".", var_name, *var_size.split(" ")],
-                    ]
-                )
-                + "\n"
-                + indent_whitespace(indent)
+    elif exp[0] in ["var", "set"]:
+        if exp[0] == "var":
+            if len(exp) != 4:
+                raise SyntaxError("Cannot parse var assignation")
+            var_name = exp[-2] if isinstance(exp[-2], str) else exp[-2][1]
+            var_type = (
+                (exp[1] if isinstance(exp[1], str) else exp[1][1])
+                if len(exp) == 4
+                else ""
             )
-        else:
+            var_size = (
+                (0 if isinstance(exp[1], str) else " ".join(exp[1][2:]))
+                if len(exp) == 4
+                else 0
+            )
+            if var_type != "":
+                assign = (
+                    list2codev(
+                        [
+                            "local",
+                            var_type,
+                            var_name
+                            if var_size == 0
+                            else [".", var_name, *var_size.split(" ")],
+                        ],
+                        scope=scope,
+                    )
+                    + "\n"
+                    + indent_whitespace(indent)
+                )
+        elif exp[0] == "set":
+            if len(exp) != 3:
+                raise SyntaxError("Cannot parse set statement")
             assign = ""
-        return f"{assign}{list2codev(exp[-2])} == {list2codev(exp[-1])}"
+
+        return f"{assign}{list2codev(exp[-2],scope=scope)} == {list2codev(exp[-1],scope=scope)}"
     elif exp[0] in arith_trans.keys():
         if len(exp) not in (3, 4) or exp[0] not in arith_trans.keys():
             raise SyntaxError("Cannot parse lisp comparison")
@@ -283,7 +298,7 @@ def list2codev(exp_input, indent=0):
                 dist = 1
         parentflag1 = ["", ""] if isinstance(exp[1], str) else "()"
         parentflag2 = ["", ""] if isinstance(exp[2], str) else "()"
-        return f"{parentflag1[0]}{list2codev(exp[1],indent=0) if not isinstance(exp[1],str) or not attr_match(exp[1]) else exp[1]}{parentflag1[1]}{' '*dist}{arith_trans[exp[0]]}{' '*dist}{parentflag2[0]}{list2codev(exp[2],indent=0) if not isinstance(exp[2],str) or not attr_match(exp[2]) else exp[2]}{parentflag2[1]}"
+        return f"{parentflag1[0]}{list2codev(exp[1],indent=0,scope=scope) if not isinstance(exp[1],str) or not attr_match(exp[1]) else exp[1]}{parentflag1[1]}{' '*dist}{arith_trans[exp[0]]}{' '*dist}{parentflag2[0]}{list2codev(exp[2],indent=0,scope=scope) if not isinstance(exp[2],str) or not attr_match(exp[2]) else exp[2]}{parentflag2[1]}"
     pre = "    ".join(["" for x in range(indent + 1)])
 
     # surface_fnl_call
@@ -292,7 +307,7 @@ def list2codev(exp_input, indent=0):
     # resolve_subcalls
     if "\n" not in join:
         pre = ""
-    exp_up = [pre + list2codev(y, indent=indent) for y in exp_up]
+    exp_up = [pre + list2codev(y, indent=indent, scope=scope) for y in exp_up]
 
     if len(exp_up) == 1:
         return f"{start}{f'{join}'.join(exp_up)}{close}".strip()
@@ -512,7 +527,7 @@ def expand_macro(program_input):
                         "if",
                         ["eva", "out"],
                         ["var", "str", "origoutsetting", '"y"'],
-                        ["var", "origoutsetting", '"n"'],
+                        ["set", "origoutsetting", '"n"'],
                     ],
                     ["var", "str", "outvar", '"n"'],
                     ["out", "outvar"],
@@ -520,7 +535,7 @@ def expand_macro(program_input):
                         "if",
                         ["eva", "ver"],
                         ["var", "str", "origverSetting", '"y"'],
-                        ["var", "origversetting", '"n"'],
+                        ["set", "origversetting", '"n"'],
                     ],
                     ["ver", "n"],
                 ]
@@ -543,8 +558,11 @@ def expand_macro(program_input):
 
 def move_def_to_top(program_input):
     program = copy(program_input)
-    lclstr = compile(r"lcl\sstr.*")
-    lclnum = compile(r"lcl\snum.*")
+    lclstr = compile(r"^\s*lcl\sstr.*", MULTILINE)
+    lclnum = compile(r"^\s*lcl\snum.*", MULTILINE)
+    # lclfctget = compile(r"(^\s*fct.*)", MULTILINE)
+    # fct_local_get = lclfctget.findall(program)
+
     str_def = lclstr.findall(program)
     num_def = lclnum.findall(program)
     definitions = (
@@ -559,6 +577,36 @@ def move_def_to_top(program_input):
     )
 
     program = f"""{definitions}{lclnum.sub("", lclstr.sub("", program))}"""
+    fct_local_get = findall(r"(^\s*fct.*)", program, MULTILINE)
+    fct_local_get = fct_local_get
+    fct_index = [
+        i for i, item in enumerate(fct_local_get) if search(r"^\s*fct\s.*", item)
+    ]
+    program = sub(r"(fctlcl.*)", "", program, MULTILINE)
+    for ii, xx in enumerate(fct_index):
+        if len(fct_index) > (ii + 1):
+            elements = fct_local_get[xx + 1 : fct_index[ii + 1]]
+        else:
+            elements = fct_local_get[xx + 1 :]
+        elements = [x.strip().replace('fctlcl', 'lcl') for x in elements]
+        elements_str = [x for x in elements if lclstr.search(x)]
+        elements_num = [x for x in elements if lclnum.search(x)]
+        definitions = (
+            f"{indent_whitespace(1)}lcl str {' '.join(set([y for x in elements_str for y in x.split()[2:]]))}\n"
+            if len(elements_str) > 0
+            else ""
+        )
+        definitions += (
+            f"{indent_whitespace(1)}lcl num {' '.join(set([y for x in elements_num for y in x.split()[2:]]))}\n"
+            if len(elements_num) > 0
+            else ""
+        )
+        program = sub(
+            escape(fct_local_get[xx]),
+            fct_local_get[xx] + r"\n" + definitions,
+            program,
+            MULTILINE,
+        )
     return sub("\n$", "", sub("\n\s*\n", "\n", program), MULTILINE)
 
 
