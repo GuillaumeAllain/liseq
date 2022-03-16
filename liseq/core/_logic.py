@@ -457,7 +457,7 @@ def expand_macro(program_input):
                                             for x in range(len(parse_inputs[1]))
                                         ],
                                         [
-                                            ["var", x, "parsevalue"]
+                                            ["set", x, "parsevalue"]
                                             for x in parse_inputs[1]
                                         ],
                                     )
@@ -498,7 +498,7 @@ def expand_macro(program_input):
                     [
                         "while",
                         ["not", ["buf.emp", ["b", r"\1"]]],
-                        ["var", r"\1", ["+", r"\1", "1"]],
+                        ["set", r"\1", ["+", r"\1", "1"]],
                     ],
                     [
                         "buf",
@@ -576,6 +576,10 @@ def move_def_to_top(program_input):
         else ""
     )
 
+    if search("rfd.*", program.split("\n")[0]):
+        first_line = program.split("\n")[0]
+        program = sub(escape(first_line), "", program)
+        definitions = first_line + "\n" + definitions
     program = f"""{definitions}{lclnum.sub("", lclstr.sub("", program))}"""
     fct_local_get = findall(r"(^\s*fct.*)", program, MULTILINE)
     fct_local_get = fct_local_get
@@ -588,7 +592,7 @@ def move_def_to_top(program_input):
             elements = fct_local_get[xx + 1 : fct_index[ii + 1]]
         else:
             elements = fct_local_get[xx + 1 :]
-        elements = [x.strip().replace('fctlcl', 'lcl') for x in elements]
+        elements = [x.strip().replace("fctlcl", "lcl") for x in elements]
         elements_str = [x for x in elements if lclstr.search(x)]
         elements_num = [x for x in elements if lclnum.search(x)]
         definitions = (
