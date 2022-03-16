@@ -388,7 +388,7 @@ def expand_macro(program_input):
                                 "eva",
                                 "buf.str",
                                 ["b", "bparseinput"],
-                                ["i", "i"],
+                                ["i", "^i"],
                                 ["j", "1"],
                             ],
                         ],
@@ -400,7 +400,7 @@ def expand_macro(program_input):
                                 "eva",
                                 "buf.str",
                                 ["b", "bparseinput"],
-                                ["i", "i"],
+                                ["i", "^i"],
                                 ["j", "2"],
                             ],
                         ],
@@ -414,7 +414,7 @@ def expand_macro(program_input):
                                     "eva",
                                     "buf.str",
                                     ["b", "bparseinput"],
-                                    ["i", "i"],
+                                    ["i", "^i"],
                                     ["j", "3"],
                                 ],
                             ],
@@ -453,7 +453,7 @@ def expand_macro(program_input):
                                     item
                                     for sublist in zip(
                                         [
-                                            ["==", "i", str(x + 1)]
+                                            ["==", "^i", str(x + 1)]
                                             for x in range(len(parse_inputs[1]))
                                         ],
                                         [
