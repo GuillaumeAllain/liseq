@@ -104,6 +104,11 @@ class Language_test(unittest.TestCase):
         self.assertEqual("3", transpiler("(3)"))
 
     def test_var(self):
+        # TODO: Var tests
+        pass
+
+    def test_tset(self):
+        # TODO: Tset tests
         pass
 
 
