@@ -6,7 +6,7 @@ from ._codev_lang import codev_builtin_func, codev_macro_words
 from copy import copy
 
 
-fun_words = ["vie", "fie", "fma", "mtf"]
+fun_words = ["vie", "fie", "fma", "mtf", "lib"]
 loop_words = ["for", "while", "unt"]
 arith_words = [
     "..",
@@ -30,7 +30,7 @@ arith_trans["=="] = "="
 arith_trans["from"] = ".."
 arith_trans["to"] = ".."
 arith_trans.update(dict.fromkeys(["~=", "not="], "<>"))
-other_keys = ["yes", "no", "n", "y", "true", "false", "if", "else"]
+other_keys = ["yes", "no", "n", "y", "true", "false", "if", "else", "m", "t"]
 definitions = ["local", "global", "num", "char"]
 
 keywords = (
@@ -50,6 +50,7 @@ string_match = lambda exp: not exp == exp.replace('"', "") or exp.startswith(":"
 
 
 def parse_var(exp):
+
     if (
         exp.lower() not in keywords
         and not exp.isnumeric()
@@ -88,6 +89,8 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             exp.insert(0, exp[0][1])
             return list2codev(exp, scope=scope)
         join = "\n\n"
+    elif exp[0] in ["load", "require"]:
+        exp[0] = "in"
     elif exp[0] in fun_words:
         join = ";"
         close = "; go"
@@ -182,7 +185,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         join = ","
         close = ")"
         exp.pop(0)
-    elif exp[0] in ["fctcall"]:
+    elif exp[0] in ["fctcall", "fncall"]:
         if len(exp[0]) < 2:
             raise SyntaxError("Cannot parse function call")
         start = f"@{exp[1]}("
@@ -220,7 +223,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         close = list2codev(exp, scope=scope)
         exp = []
 
-    elif exp[0] in ("num", "str", "local", "global"):
+    elif exp[0] in ("num", "str", "local", "lcl", "gbl", "global"):
         start = f"{exp[0].replace('global', 'gbl').replace('local', scope)} "
         if (
             not isinstance(exp[1], str)
@@ -239,6 +242,8 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         exp.pop(0)
 
     elif exp[0] in (alphas):
+        if len(exp) == 1:
+            return exp[0]
         if len(exp) != 2 and parse_var(exp[1]):
             raise SyntaxError("Buffer or Surface call error")
         if len(exp[1]) == 1:
@@ -249,6 +254,46 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         else:
             return f"{exp[0]}{list2codev(exp[1],scope=scope)}"
 
+    elif exp[0] in ["tset"]:
+        if isinstance(exp[1], str):
+            exp[1] = [
+                exp[1],
+            ]
+        if isinstance(exp[2], str):
+            exp[2] = [
+                exp[2],
+            ]
+        if isinstance(exp[2][0], str):
+            return list2codev(
+                [
+                    [
+                        [
+                            ["set", [".", list2codev(e), str(xi + 1)], list2codev(x)]
+                            for xi, x in enumerate(exp[2])
+                        ]
+                        for ei, e in enumerate(exp[1])
+                    ]
+                ]
+            )
+        elif isinstance(exp[2][0], list):
+            return list2codev(
+                [
+                    [
+                        [
+                            [
+                                [
+                                    "set",
+                                    [".", list2codev(e), str(yi + 1), str(xi + 1)],
+                                    list2codev(x[yi]),
+                                ]
+                                for xi, x in enumerate(exp[2])
+                            ]
+                            for yi in range(len(exp[2][0]))
+                        ]
+                        for ei, e in enumerate(exp[1])
+                    ]
+                ]
+            )
     elif exp[0] in ["var", "set"]:
         if exp[0] == "var":
             if len(exp) != 4:

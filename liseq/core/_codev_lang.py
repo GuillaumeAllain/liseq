@@ -166,7 +166,7 @@ codev_builtin_func = [
     "cverror",
     "array_to_buffer",
     "buffer_to_array",
-    "cnvtfield"
+    "cnvtfield",
     "cepsfile",
     "join",
     "eofile",
