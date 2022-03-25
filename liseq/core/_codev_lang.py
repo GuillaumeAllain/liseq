@@ -170,7 +170,8 @@ codev_builtin_func = [
     "cepsfile",
     "join",
     "eofile",
-    "savedata"
+    "savedata",
+    "refl",
 ]
 
 codev_macro_words = [

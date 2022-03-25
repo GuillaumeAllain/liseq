@@ -12,8 +12,8 @@ arith_words = [
     "..",
     "+",
     "-",
-    "*",
     "**",
+    "*",
     "/",
     "==",
     ">",
@@ -42,22 +42,51 @@ keywords = (
     + codev_builtin_func
     + definitions
 )
-ldm_match = lambda exp: bool(compile(r"[abcefgijlqrstuwz][\dacilos]\b").match(exp))
+arith_symbols = [
+    x for x in [sub(f"[{alphas}]+", "", y) for y in arith_trans.keys()] if x
+]
+ldm_match = lambda exp: bool(compile(r"[abcefgijlqrstuwz][\dacilos]+\b").match(exp))
 attr_match = lambda exp: bool(compile(r"[\dacilos]\b").match(exp))
 buf_func_match = lambda exp: bool(compile(r"buf\..*").match(exp))
 codev_func_match = lambda exp: bool(compile(r"codev\..*").match(exp))
 string_match = lambda exp: not exp == exp.replace('"', "") or exp.startswith(":")
 
 
-def parse_var(exp):
+def is_number(s):
+    """Returns True is string is a number."""
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
 
+
+def is_arith(exp):
+    if string_match(exp):
+        return False, None
+    elif is_number(exp) and exp[0] not in arith_symbols or exp[0] == "-":
+        return False, None
+    output_bool = False
+    for symbol in arith_symbols:
+        split_output = exp.split(symbol)
+        if len(split_output) > 1:
+            output_bool = True
+            split_output.insert(0, symbol)
+            split_output = [x for x in split_output if x]
+            break
+        else:
+            split_output
+    return (output_bool, split_output if output_bool else None)
+
+
+def parse_var(exp):
     if (
         exp.lower() not in keywords
-        and not exp.isnumeric()
-        and not ldm_match(exp)
-        and not buf_func_match(exp)
-        and not string_match(exp)
-        and not codev_func_match(exp)
+        and not is_number(exp.lower())
+        and not ldm_match(exp.lower())
+        and not buf_func_match(exp.lower())
+        and not string_match(exp.lower())
+        and not codev_func_match(exp.lower())
     ):
         return True
     else:
@@ -77,7 +106,13 @@ def list2codev(exp_input, indent=0, scope="lcl"):
     if len(exp) == 0:
         return ""
     elif isinstance(exp, str):
-        if parse_var(exp):
+        arith_bool, arith_output = is_arith(exp)
+
+        if exp == "nil":
+            return ""
+        elif arith_bool:
+            return list2codev(arith_output)
+        elif parse_var(exp):
             return exp if exp.startswith("^") else f"^{exp}"
         else:
             if exp.startswith(":"):
@@ -88,13 +123,25 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         if len(exp[0]) >= 3 and exp[0][0] == "." and exp[0][1] in ["num", "str"]:
             exp.insert(0, exp[0][1])
             return list2codev(exp, scope=scope)
+        elif len(exp) > 1 and isinstance(exp[1], str):
+            arith_bool, arith_output = is_arith(exp[1])
+            if arith_bool:
+                return_list = []
+                return_list.append(arith_output[0])
+                return_list.append(exp[0])
+                for rest in arith_output[1:]:
+                    return_list.append(rest)
+                for rest in exp[2:]:
+                    return_list.append(rest)
+                return list2codev(return_list)
         join = "\n\n"
-    elif exp[0] in ["load", "require"]:
+    elif exp[0].lower() in ["load", "require"]:
         exp[0] = "in"
-    elif exp[0] in fun_words:
-        join = ";"
-        close = "; go"
-    elif exp[0] in loop_words:
+    elif exp[0].lower() in fun_words:
+        join = "\n"
+        close = "\ngo"
+        indent += 1
+    elif exp[0].lower() in loop_words:
         if len(exp) < 2:
             raise SyntaxError("Cannot parse loop")
         join = "\n"
@@ -211,8 +258,8 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         start = "not("
         close = ")"
         exp.pop(0)
-    elif exp[0] in ["goto", "lbl"]:
-        return f"{exp[0]} {exp[1]}"
+    elif exp[0] in ["goto", "lbl", "label", "got"]:
+        return f"{sub('label','lbl',exp[0])} {exp[1]}"
     elif exp[0] == "compact":
         join = ";"
         exp.pop(0)
@@ -249,10 +296,9 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         if len(exp[1]) == 1:
             return f"{list2codev(exp[0]+exp[1],scope=scope)}"
         elif len(exp[1]) == 3 and exp[1][0] in arith_trans.keys():
-            exp[1].append(0)
-            return f"{exp[0]}{list2codev(exp[1],scope=scope)}"
+            return f"{exp[0]}{sub('[()]','',list2codev(exp[1],scope=scope).replace(' ',''))}"
         else:
-            return f"{exp[0]}{list2codev(exp[1],scope=scope)}"
+            return f"{exp[0]}{sub('[()]','',list2codev(exp[1],scope=scope).replace(' ',''))}"
 
     elif exp[0] in ["tset"]:
         if isinstance(exp[1], str):
@@ -330,20 +376,29 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             assign = ""
 
         return f"{assign}{list2codev(exp[-2],scope=scope)} == {list2codev(exp[-1],scope=scope)}"
-    elif exp[0] in arith_trans.keys():
-        if len(exp) not in (3, 4) or exp[0] not in arith_trans.keys():
-            raise SyntaxError("Cannot parse lisp comparison")
-        if len(exp) == 4:
-            dist = int(exp[3])
-            exp.pop(3)
-        else:
-            if arith_trans[exp[0]] == "..":
-                dist = 0
+    elif exp[0] == "raw":
+        for subindex, substring in enumerate(exp[1:]):
+            if not isinstance(substring, str):
+                raise SyntaxError(f"Cannot parse subelement of type: {type(substring)}")
+            if substring.startswith(":"):
+                exp[subindex + 1] = substring[1:]
+            elif substring.startswith('"') and substring.endswith('"'):
+                exp[subindex + 1] = substring[1:-1]
             else:
-                dist = 1
+                raise SyntaxError("Cannot parse substring")
+        return "\n".join(exp[1:])
+    elif exp[0] in arith_trans.keys():
+        if len(exp) < 3 or exp[0] not in arith_trans.keys():
+            raise SyntaxError("Cannot parse s-expr arithmetics")
+        elif len(exp) >= 4:
+            raise SyntaxError("Cannot parse s-expr arithmetics")
+        if arith_trans[exp[0]] == "..":
+            dist = 0
+        else:
+            dist = 1
         parentflag1 = ["", ""] if isinstance(exp[1], str) else "()"
         parentflag2 = ["", ""] if isinstance(exp[2], str) else "()"
-        return f"{parentflag1[0]}{list2codev(exp[1],indent=0,scope=scope) if not isinstance(exp[1],str) or not attr_match(exp[1]) else exp[1]}{parentflag1[1]}{' '*dist}{arith_trans[exp[0]]}{' '*dist}{parentflag2[0]}{list2codev(exp[2],indent=0,scope=scope) if not isinstance(exp[2],str) or not attr_match(exp[2]) else exp[2]}{parentflag2[1]}"
+        return f"({parentflag1[0]}{list2codev(exp[1],indent=0,scope=scope) if not isinstance(exp[1],str) or not attr_match(exp[1]) else exp[1]}{parentflag1[1]}{' '*dist}{arith_trans[exp[0]]}{' '*dist}{parentflag2[0]}{list2codev(exp[2],indent=0,scope=scope) if not isinstance(exp[2],str) or not attr_match(exp[2]) else exp[2]}{parentflag2[1]})"
     pre = "    ".join(["" for x in range(indent + 1)])
 
     # surface_fnl_call
@@ -382,7 +437,7 @@ def expand_macro(program_input):
                         "buf",
                         "put",
                         ["b", "bparsesyntax"],
-                        ["i", ["+", "l", "1"]],
+                        ["raw", '"il+1"'],
                         ["j", "1"],
                         f'''"syntax: {parse_func_name} {' '.join([f'[{x}]' for x in parse_inputs[2]])} <----- uses text qualifiers entered in any order"''',
                     ],
@@ -390,7 +445,7 @@ def expand_macro(program_input):
                         "buf",
                         "put",
                         ["b", "bparsesyntax"],
-                        ["i", ["+", "l", "1"]],
+                        ["raw", '"il+1"'],
                         ["j", "1"],
                         '"      - or - "',
                     ],
@@ -398,7 +453,7 @@ def expand_macro(program_input):
                         "buf",
                         "put",
                         ["b", "bparsesyntax"],
-                        ["i", ["+", "l", "1"]],
+                        ["raw", '"il+1"'],
                         ["j", "1"],
                         f'''"syntax: {parse_func_name} {' '.join(parse_inputs[2])} <----- uses numeric inputs in this order only "''',
                     ],
@@ -410,14 +465,7 @@ def expand_macro(program_input):
                             "buf",
                             "put",
                             ["b", "bparseinput"],
-                            [
-                                "i",
-                                [
-                                    "+",
-                                    "l",
-                                    "1",
-                                ],
-                            ],
+                            ["raw", '"il+1"'],
                             [".", "rfstr", "input"],
                         ],
                     ],
@@ -549,21 +597,14 @@ def expand_macro(program_input):
                         "buf",
                         "put",
                         ["b", r"\1"],
-                        [
-                            "i",
-                            [
-                                "+",
-                                "l",
-                                "1",
-                            ],
-                        ],
+                        ["raw", '"il+1"'],
                         ":placeover",
                     ],
                 ]
             ),
             program,
         )
-    codev_supress_macro = compile(r"codev\.supressoutput.*")
+    codev_supress_macro = compile(r"codev\.suppressoutput.*")
     if len(codev_supress_macro.findall(program)) > 0:
         program = codev_supress_macro.sub(
             list2codev(
