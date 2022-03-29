@@ -390,7 +390,8 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         if len(exp) == 1:
             return list2codev(exp[0], scope=scope)
         else:
-            raise SyntaxError("Cannot parse expr: " + str(exp_input))
+            return list2codev(["command"]+exp, scope=scope, indent=indent)
+            # raise SyntaxError("Cannot parse expr: " + str(exp_input))
 
     pre = "    ".join(["" for x in range(indent + 1)])
 
