@@ -75,10 +75,6 @@ def parse_var(exp):
         return False
 
 
-# def parse_var(exp):
-#     return True
-
-
 def indent_whitespace(number):
     return "    ".join(["" for x in range(number + 1)])
 
@@ -212,9 +208,6 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             return list2codev(["local"] + exp, scope=scope)
 
     elif exp[0] in ("local", "global"):
-        # print(exp)
-        # if len(exp[2:]) % 2:
-        #     raise SyntaxError("Cannot parse var definition")
         start = f"{exp[0].replace('global', 'gbl').replace('local', scope)} "
         start += f"{exp[1]} "
         exp.pop(0)
@@ -280,6 +273,14 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         join = "\n"
         close = "\ngo"
         indent += 1
+        exp.pop(0)
+        exp.pop(0)
+
+    elif exp[0] == "command":
+        start = exp[1] + " "
+        join = " "
+        close = " "
+        # indent += 1
         exp.pop(0)
         exp.pop(0)
 
