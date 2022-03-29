@@ -296,9 +296,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                 raise SyntaxError("Cannot parse for loop init")
             start = f"{exp[0]} {list2codev(exp[1][0],scope=scope)} {' '.join([list2codev(x) for x in exp[1][1:]])}\n"
         elif exp[0] == "while":
-            start = (
-                f"{exp[0]} {list2codev(exp[1],scope=scope)}\n"
-            )
+            start = f"{exp[0]} {list2codev(exp[1],scope=scope)}\n"
         elif exp[0] == "unt":
             start = f"{exp[0]}\n"
             close += f" {exp[1]}"
@@ -464,7 +462,7 @@ def expand_macro(program_input):
                         ],
                         f'''"syntax: {parse_func_name} {' '.join(parse_inputs[2])} <----- uses numeric inputs in this order only "''',
                     ],
-                    ["setd",["buf", "del"], ["b", "bparseinput"]],
+                    ["setd", ["buf", "del"], ["b", "bparseinput"]],
                     [
                         "for",
                         ["input", "1", str(len(parse_inputs) - 1)],
@@ -588,7 +586,12 @@ def expand_macro(program_input):
                                 ],
                                 [
                                     "print",
-                                    ["call","concat", '"Invalid input: "', "parseinput"],
+                                    [
+                                        "call",
+                                        "concat",
+                                        '"Invalid input: "',
+                                        "parseinput",
+                                    ],
                                 ],
                                 ["print"],
                                 ["setd", ["buf", "lis", "nol"], ["b", "bparsesyntax"]],
@@ -654,7 +657,8 @@ def expand_macro(program_input):
             program,
         )
 
-    lblend = f"{';'.join([list2codev(['setd',['buf', 'del'], ['b', x]]) for x in buf_empty_macro.findall(program_start)])}"
+    newline = "\n"
+    lblend = f"{newline.join([list2codev(['setd',['buf', 'del'], ['b', x]]) for x in buf_empty_macro.findall(program_start)])}"
     if codev_supress_macro.findall(program_start) != []:
         add_out = list2codev(
             [
@@ -663,7 +667,10 @@ def expand_macro(program_input):
             ]
         )
         lblend = f"{lblend}\n{add_out}"
-    program = f"{program}\nlbl end\n{lblend}" if lblend != "" else program
+    if findall("lbl end", program):
+        program = sub("lbl end", f"lbl end\n{lblend}", program)
+    else:
+        program = f"{program}\nlbl end\n{lblend}" if lblend != "" else program
     return program
 
 
