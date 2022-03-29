@@ -4,7 +4,6 @@ from pyparsing.helpers import nested_expr, alphas
 from re import sub, compile, findall, search, escape, MULTILINE
 from copy import copy
 
-
 loop_words = ["for", "while", "unt"]
 arith_words = [
     "..",
@@ -64,17 +63,6 @@ def is_arith(exp):
     return (output_bool, split_output if output_bool else None)
 
 
-def parse_var(exp):
-    if (
-        not is_number(exp.lower())
-        and not string_match(exp.lower())
-        and exp not in keywords
-    ):
-        return True
-    else:
-        return False
-
-
 def indent_whitespace(number):
     return "    ".join(["" for x in range(number + 1)])
 
@@ -96,8 +84,6 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             return ""
         elif arith_bool:
             return list2codev(arith_output)
-        elif parse_var(exp):
-            return exp if exp.startswith("^") else f"^{exp}"
         else:
             if exp.startswith(":"):
                 return f'"{exp[1:]}"'
@@ -158,6 +144,17 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                     ]
                 ]
             )
+    elif exp[0] in ["var"]:
+        if len(exp) < 2:
+            raise SyntaxError("Var statement should at least contain one variable")
+        return list2codev(
+            [
+                y if y.startswith("^") else "^" + y
+                for y in [list2codev(x) for x in exp[1:]]
+            ],
+            scope=scope,
+            indent=indent,
+        )
     elif exp[0] in ["set", "setq"]:
         if len(exp[1:]) % 2:
             raise SyntaxError("Cannot parse set statement: " + str(exp))
@@ -169,9 +166,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                 )
 
                 var = var[1]
-            output_string += (
-                f"{list2codev(var,scope=scope)} == {list2codev(val,scope=scope)}\n"
-            )
+            output_string += f"{list2codev(['var',var],scope=scope)} == {list2codev(val,scope=scope)}\n"
         return output_string
 
     elif exp[0] in ["setd"]:
@@ -203,7 +198,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                 + str(exp)
             )
         if scope == "fundef":
-            return f"{exp[0]} {list2codev(exp[1])}"
+            return f"{exp[0]} {list2codev(['var', list2codev(exp[1])])}"
         else:
             return list2codev(["local"] + exp, scope=scope)
 
@@ -212,7 +207,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         start += f"{exp[1]} "
         exp.pop(0)
         exp.pop(0)
-        exp = [list2codev(x, scope=scope) for x in exp]
+        exp = [list2codev(["var"] + [x], scope=scope) for x in exp]
     elif exp[0] in ["nth", "."]:
 
         if len(exp) < 3:
@@ -240,9 +235,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         )
         start = f"{indent_whitespace(indent)}fct @{exp[1]}({args})\n"
         join = "\n"
-        close = (
-            f"\n{indent_whitespace(indent)}end fct {list2codev(exp[-1],scope=scope)}"
-        )
+        close = f"\n{indent_whitespace(indent)}end fct {list2codev(['var'] + [exp[-1],],scope=scope)}"
         exp.pop(0)
         exp.pop(0)
         exp.pop(0)
@@ -428,14 +421,14 @@ def expand_macro(program_input):
         program = codev_parse_input.sub(
             list2codev(
                 [
-                    ["setd", "buf.emp.find", "bparseinput"],
-                    ["setd", "buf.emp.find", "bparsesyntax"],
+                    ["setd", "buf.emp.find", "^parseinput"],
+                    ["setd", "buf.emp.find", "^parsesyntax"],
                     [
                         "setd",
                         [
                             "buf",
                             "put",
-                            ["b", "bparsesyntax"],
+                            ["b", "^parsesyntax"],
                             ["raw", '"il+1"'],
                             ["j", "1"],
                         ],
@@ -446,7 +439,7 @@ def expand_macro(program_input):
                         [
                             "buf",
                             "put",
-                            ["b", "bparsesyntax"],
+                            ["b", "^parsesyntax"],
                             ["raw", '"il+1"'],
                             ["j", "1"],
                         ],
@@ -457,13 +450,13 @@ def expand_macro(program_input):
                         [
                             "buf",
                             "put",
-                            ["b", "bparsesyntax"],
+                            ["b", "^parsesyntax"],
                             ["raw", '"il+1"'],
                             ["j", "1"],
                         ],
                         f'''"syntax: {parse_func_name} {' '.join(parse_inputs[2])} <----- uses numeric inputs in this order only "''',
                     ],
-                    ["setd", ["buf", "del"], ["b", "bparseinput"]],
+                    ["setd", ["buf", "del"], ["b", "^parseinput"]],
                     [
                         "for",
                         ["input", "1", str(len(parse_inputs) - 1)],
@@ -472,16 +465,16 @@ def expand_macro(program_input):
                             [
                                 "buf",
                                 "put",
-                                ["b", "bparseinput"],
+                                ["b", "^parseinput"],
                                 ["raw", '"il+1"'],
                             ],
                             [".", "rfstr", "input"],
                         ],
                     ],
-                    ["in", '"cv_macro:ParseInputs.seq"', "bparseinput"],
+                    ["in", '"cv_macro:ParseInputs.seq"', ["b", ["var", "parseinput"]]],
                     [
                         "for",
-                        ["i", "1", ["database", "buf.lst", ["b", "bparseinput"]]],
+                        ["i", "1", ["database", "buf.lst", ["b", "^parseinput"]]],
                         [
                             "set",
                             [
@@ -491,7 +484,7 @@ def expand_macro(program_input):
                             [
                                 "database",
                                 "buf.str",
-                                ["b", "bparseinput"],
+                                ["b", "^parseinput"],
                                 ["i", "^i"],
                                 ["j", "1"],
                             ],
@@ -505,7 +498,7 @@ def expand_macro(program_input):
                             [
                                 "database",
                                 "buf.str",
-                                ["b", "bparseinput"],
+                                ["b", "^parseinput"],
                                 ["i", "^i"],
                                 ["j", "2"],
                             ],
@@ -522,7 +515,7 @@ def expand_macro(program_input):
                                 [
                                     "database",
                                     "buf.str",
-                                    ["b", "bparseinput"],
+                                    ["b", "^parseinput"],
                                     ["i", "^i"],
                                     ["j", "3"],
                                 ],
@@ -532,30 +525,38 @@ def expand_macro(program_input):
                             "if",
                             [
                                 "or",
-                                ["==", ["call", "upcase", "parseinput"], '"H"'],
-                                ["==", ["call", "upcase", "parseinput"], '"HELP"'],
+                                [
+                                    "==",
+                                    ["call", "upcase", ["var", "parseinput"]],
+                                    '"H"',
+                                ],
+                                [
+                                    "==",
+                                    ["call", "upcase", ["var", "parseinput"]],
+                                    '"HELP"',
+                                ],
                             ],
                             [
                                 ["setd", "out", "y"],
                                 ["print"],
-                                ["setd", ["buf", "lis", "nol"], ["b", "bparsesyntax"]],
+                                ["setd", ["buf", "lis", "nol"], ["b", "^parsesyntax"]],
                                 ["goto", "end"],
                             ],
                             *[
                                 item
                                 for sublist in zip(
                                     [
-                                        ["==", "parsequalifier", x.upper()]
+                                        ["==", "^parsequalifier", x.upper()]
                                         for x in parse_inputs[0]
                                     ],
                                     [
-                                        ["set", ["num", y], "parsevalue"]
+                                        ["set", ["num", y], "^parsevalue"]
                                         for y in parse_inputs[1]
                                     ],
                                 )
                                 for item in sublist
                             ],
-                            ["==", "parsequalifier", '"IsNum"'],
+                            ["==", "^parsequalifier", '"IsNum"'],
                             [
                                 "if",
                                 *[
@@ -566,7 +567,7 @@ def expand_macro(program_input):
                                             for x in range(len(parse_inputs[1]))
                                         ],
                                         [
-                                            ["set", x, "parsevalue"]
+                                            ["set", x, "^parsevalue"]
                                             for x in parse_inputs[1]
                                         ],
                                     )
@@ -591,11 +592,11 @@ def expand_macro(program_input):
                                         "call",
                                         "concat",
                                         '"Invalid input: "',
-                                        "parseinput",
+                                        "^parseinput",
                                     ],
                                 ],
                                 ["print"],
-                                ["setd", ["buf", "lis", "nol"], ["b", "bparsesyntax"]],
+                                ["setd", ["buf", "lis", "nol"], ["b", "^parsesyntax"]],
                                 ["print"],
                                 ["goto", "end"],
                             ],
@@ -616,15 +617,15 @@ def expand_macro(program_input):
                     ["set", ["num", r"\1"], "1"],
                     [
                         "while",
-                        ["not", ["database", "buf.emp", ["b", r"\1"]]],
-                        ["set", r"\1", ["+", r"\1", "1"]],
+                        ["not", ["database", "buf.emp", ["b", ["var", r"\1"]]]],
+                        ["set", r"\1", ["+", ["var", r"\1"], "1"]],
                     ],
                     [
                         "setd",
                         [
                             "buf",
                             "put",
-                            ["b", r"\1"],
+                            ["b", ["var", r"\1"]],
                             ["raw", '"il+1"'],
                         ],
                         ":placeover",
@@ -645,7 +646,7 @@ def expand_macro(program_input):
                         ["set", "origoutsetting", '"n"'],
                     ],
                     ["set", ["str", "outvar"], '"n"'],
-                    ["setd", "out", "outvar"],
+                    ["setd", "out", ["var", "outvar"]],
                     [
                         "if",
                         ["database", "ver"],
@@ -659,12 +660,12 @@ def expand_macro(program_input):
         )
 
     newline = "\n"
-    lblend = f"{newline.join([list2codev(['setd',['buf', 'del'], ['b', x]]) for x in buf_empty_macro.findall(program_start)])}"
+    lblend = f"{newline.join([list2codev(['setd',['buf', 'del'], ['b', ['var',x]]]) for x in buf_empty_macro.findall(program_start)])}"
     if codev_supress_macro.findall(program_start) != []:
         add_out = list2codev(
             [
-                ["setd", "out", "origoutsetting"],
-                ["if", ["==", "origversetting", '"y"'], ["setd", "ver", "y"]],
+                ["setd", "out", ["var", "origoutsetting"]],
+                ["if", ["==", ["var", "origversetting"], '"y"'], ["setd", "ver", "y"]],
             ]
         )
         lblend = f"{lblend}\n{add_out}"

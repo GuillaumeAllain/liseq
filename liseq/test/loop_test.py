@@ -4,12 +4,12 @@ from liseq.core import transpiler
 
 class Loop_test(unittest.TestCase):
     def test_if_1arg(self):
-        self.assertEqual("if (^foo = 3)\nend if", transpiler("(if (== foo 3))"))
+        self.assertEqual("if (^foo = 3)\nend if", transpiler("(if (== (var foo) 3))"))
 
     def test_if_2arg(self):
         self.assertEqual(
             "if (^foo = 2)\n    ^barvar == 2\n    ^barvar == (^barvar + 1)\nend if",
-            transpiler("(if (== foo 2) ((set barvar 2)(set barvar (+ barvar 1))))"),
+            transpiler("(if (== (var foo) 2) ((set barvar 2)(set barvar (+ (var barvar) 1))))"),
         )
 
     def test_if_2argelse(self):
@@ -17,7 +17,7 @@ class Loop_test(unittest.TestCase):
             "if (^foo = 2)\n    ^barvar == 2\n"
             "    ^barvar == (^barvar + 1)\nelse\n    ^barvar == 3\nend if",
             transpiler(
-                "(if (== foo 2) ((set barvar 2)(set barvar (+ barvar 1))) (set barvar 3))"
+                "(if (== (var foo) 2) ((set barvar 2)(set barvar (+ ^barvar 1))) (set barvar 3))"
             ),
         )
 
@@ -29,8 +29,8 @@ class Loop_test(unittest.TestCase):
             "\n    ^barvar == 3\n    ^barvar == (^barvar + 2)\n"
             "else\n    ^barvar == 3\nend if",
             transpiler(
-                "(if (== foo 2) ((set barvar 2)(set barvar (+ barvar 1)))"
-                " (== foo 3) ((set barvar 3)(set barvar (+ barvar 2))) (set barvar 3))"
+                "(if (== ^foo 2) ((set barvar 2)(set barvar (+ ^barvar 1)))"
+                " (== (var foo) 3) ((set barvar 3)(set barvar (+ ^barvar 2))) (set ^barvar 3))"
             ),
         )
 
@@ -41,24 +41,24 @@ class Loop_test(unittest.TestCase):
             "else if (^foo = 3)"
             "\n    ^barvar == 3\n    ^barvar == (^barvar + 2)\nend if",
             transpiler(
-                "(if (== foo 2) ((set barvar 2)(set barvar (+ barvar 1)))"
-                " (== foo 3) ((set barvar 3)(set barvar (+ barvar 2))))"
+                "(if (== ^foo 2) ((set barvar 2)(set barvar (+ (var barvar) 1)))"
+                " (== (var foo) 3) ((set barvar 3)(set barvar (+ ^barvar 2))))"
             ),
         )
 
     def test_chained_if(self):
         self.assertEqual(
             "if (^foo = 3)\n    if (^foo = 2)\n        wri true\n    end if\nend if",
-            transpiler("(if (== foo 3) (if (== foo 2) (wri true)))"),
+            transpiler("(if (== ^foo 3) (if (== (var foo) 2) (print true)))"),
         )
 
     def test_for_empty(self):
-        self.assertEqual("for ^i 1 10 3\nend for", transpiler("(for [i 1 10 3])"))
+        self.assertEqual("for ^i 1 10 3\nend for", transpiler("(for [^i 1 10 3])"))
 
     def test_for_args(self):
         self.assertEqual(
             "for ^i 1 10 3\n    wri 4\n    ^foovar == 3\nend for",
-            transpiler("(for [i 1 10 3] (wri 4) (set foovar 3))"),
+            transpiler("(for [^i 1 10 3] (print 4) (set (var foovar) 3))"),
         )
 
     def test_chained_for_args(self):
@@ -66,7 +66,7 @@ class Loop_test(unittest.TestCase):
             "if true\n    for ^i 1 10 3"
             "\n        wri 4\n        ^foovar == 3"
             "\n    end for\nend if",
-            transpiler("(if true (for [i 1 10 3] (wri 4) (set foovar 3)))"),
+            transpiler("(if true (for [(var i) 1 10 3] (print 4) (set ^foovar 3)))"),
         )
 
     # def test_unt(self):

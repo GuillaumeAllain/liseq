@@ -22,7 +22,7 @@ class Artith_test(unittest.TestCase):
     def test_surf(self):
         self.assertEqual(transpiler("(.. s 3)"), "s..3")
         self.assertEqual(transpiler("(.. s l)"), "s..l")
-        self.assertEqual(transpiler("(.. s surf)"), "s..^surf")
+        self.assertEqual(transpiler("(.. s (var surf))"), "s..^surf")
 
 
 if __name__ == "__main__":

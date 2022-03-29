@@ -47,11 +47,11 @@ class Set_test(unittest.TestCase):
     def test_database_attribution(self):
         self.assertEqual("thi 10", transpiler("(setd thi 10)"))
         self.assertEqual("thi s1 10", transpiler("(setd (thi s1) 10)"))
-        self.assertEqual("thi s1 ^surf", transpiler("(setd (thi s1) surf)"))
+        self.assertEqual("thi s1 ^surf", transpiler("(setd (thi s1) (var surf))"))
         self.assertEqual(
-            "thi s^surf ^thickness", transpiler("(setd (thi (s surf)) thickness)")
+            "thi s^surf ^thickness", transpiler("(setd (thi (s ^surf)) (var thickness))")
         )
-        self.assertEqual("thi s3 ^surf", transpiler("(setd (thi (s 3)) surf)"))
+        self.assertEqual("thi s3 ^surf", transpiler("(setd (thi (s 3)) ^surf)"))
 
     # def test_function_definition(self):
 

@@ -24,7 +24,7 @@ class Types_test(unittest.TestCase):
         )
         self.assertEqual(
             "s^surf",
-            transpiler("(s surf)"),
+            transpiler("(s (var surf))"),
         )
         self.assertEqual("s3..4", transpiler("(.. (s 3) 4)"))
         self.assertEqual("so..l", transpiler("(.. (s o) l)"))
@@ -44,7 +44,7 @@ class Types_test(unittest.TestCase):
         )
         self.assertEqual(
             "z^last",
-            transpiler("(z last)"),
+            transpiler("(z (var last))"),
         )
 
     def test_database(self):
