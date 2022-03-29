@@ -111,15 +111,17 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         join = "\n\n"
     elif exp[0] == "raw":
         for subindex, substring in enumerate(exp[1:]):
-            if not isinstance(substring, str):
-                raise SyntaxError(f"Cannot parse subelement of type: {type(substring)}")
-            if substring.startswith(":"):
+            if isinstance(substring, list):
+                substring.insert(0, "raw")
+                exp[subindex + 1] = list2codev(substring)
+                # raise SyntaxError(f"Cannot parse subelement of type: {type(substring)}")
+            elif substring.startswith(":"):
                 exp[subindex + 1] = substring[1:]
             elif substring.startswith('"') and substring.endswith('"'):
                 exp[subindex + 1] = substring[1:-1]
-            else:
-                raise SyntaxError("Cannot parse substring")
-        return "\n".join(exp[1:])
+            # else:
+            #     raise SyntaxError("Cannot parse substring: "+str(exp))
+        return " ".join(exp[1:])
     elif exp[0] in ["tset"]:
         if isinstance(exp[1], str):
             exp[1] = [
@@ -192,6 +194,9 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             output_string += list2codev(val) + "\n" + indent_whitespace(indent)
         return output_string
 
+    elif "codev" in exp[0]:
+        exp.insert(0, "raw")
+        return list2codev(exp)
     elif exp[0] == "database":
         return f'({" ".join([x if isinstance(x, str) else list2codev(x) for x in exp[1:]])})'
 
@@ -292,10 +297,10 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             start = f"{exp[0]} {list2codev(exp[1][0],scope=scope)} {' '.join([list2codev(x) for x in exp[1][1:]])}\n"
         elif exp[0] == "while":
             start = (
-                f"{list2codev(exp[0],scope=scope)} {list2codev(exp[1],scope=scope)}\n"
+                f"{exp[0]} {list2codev(exp[1],scope=scope)}\n"
             )
         elif exp[0] == "unt":
-            start = f"{list2codev(exp[0],scope=scope)}\n"
+            start = f"{exp[0]}\n"
             close += f" {exp[1]}"
         exp.pop(0)
         exp.pop(0)
@@ -424,49 +429,60 @@ def expand_macro(program_input):
         program = codev_parse_input.sub(
             list2codev(
                 [
-                    ["buf.emp.find", "bparseinput"],
-                    ["buf.emp.find", "bparsesyntax"],
-                    ["buf", "del", ["b", "bparseinput"]],
+                    ["setd", "buf.emp.find", "bparseinput"],
+                    ["setd", "buf.emp.find", "bparsesyntax"],
                     [
-                        "buf",
-                        "put",
-                        ["b", "bparsesyntax"],
-                        ["raw", '"il+1"'],
-                        ["j", "1"],
+                        "setd",
+                        [
+                            "buf",
+                            "put",
+                            ["b", "bparsesyntax"],
+                            ["raw", '"il+1"'],
+                            ["j", "1"],
+                        ],
                         f'''"syntax: {parse_func_name} {' '.join([f'[{x}]' for x in parse_inputs[2]])} <----- uses text qualifiers entered in any order"''',
                     ],
                     [
-                        "buf",
-                        "put",
-                        ["b", "bparsesyntax"],
-                        ["raw", '"il+1"'],
-                        ["j", "1"],
+                        "setd",
+                        [
+                            "buf",
+                            "put",
+                            ["b", "bparsesyntax"],
+                            ["raw", '"il+1"'],
+                            ["j", "1"],
+                        ],
                         '"      - or - "',
                     ],
                     [
-                        "buf",
-                        "put",
-                        ["b", "bparsesyntax"],
-                        ["raw", '"il+1"'],
-                        ["j", "1"],
+                        "setd",
+                        [
+                            "buf",
+                            "put",
+                            ["b", "bparsesyntax"],
+                            ["raw", '"il+1"'],
+                            ["j", "1"],
+                        ],
                         f'''"syntax: {parse_func_name} {' '.join(parse_inputs[2])} <----- uses numeric inputs in this order only "''',
                     ],
-                    ["buf", "del", ["b", "bparseinput"]],
+                    ["setd",["buf", "del"], ["b", "bparseinput"]],
                     [
                         "for",
                         ["input", "1", str(len(parse_inputs) - 1)],
                         [
-                            "buf",
-                            "put",
-                            ["b", "bparseinput"],
-                            ["raw", '"il+1"'],
+                            "setd",
+                            [
+                                "buf",
+                                "put",
+                                ["b", "bparseinput"],
+                                ["raw", '"il+1"'],
+                            ],
                             [".", "rfstr", "input"],
                         ],
                     ],
                     ["in", '"cv_macro:ParseInputs.seq"', "bparseinput"],
                     [
                         "for",
-                        ["i", "1", ["eva", "buf.lst", ["b", "bparseinput"]]],
+                        ["i", "1", ["database", "buf.lst", ["b", "bparseinput"]]],
                         [
                             "set",
                             [
@@ -474,7 +490,7 @@ def expand_macro(program_input):
                                 "parseinput",
                             ],
                             [
-                                "eva",
+                                "database",
                                 "buf.str",
                                 ["b", "bparseinput"],
                                 ["i", "^i"],
@@ -488,7 +504,7 @@ def expand_macro(program_input):
                                 "parsequalifier",
                             ],
                             [
-                                "eva",
+                                "database",
                                 "buf.str",
                                 ["b", "bparseinput"],
                                 ["i", "^i"],
@@ -502,9 +518,10 @@ def expand_macro(program_input):
                                 "parsevalue",
                             ],
                             [
+                                "call",
                                 "str_to_num",
                                 [
-                                    "eva",
+                                    "database",
                                     "buf.str",
                                     ["b", "bparseinput"],
                                     ["i", "^i"],
@@ -516,13 +533,13 @@ def expand_macro(program_input):
                             "if",
                             [
                                 "or",
-                                ["eva", ["==", ["upcase", "parseinput"], '"H"']],
-                                ["eva", ["==", ["upcase", "parseinput"], '"HELP"']],
+                                ["==", ["call", "upcase", "parseinput"], '"H"'],
+                                ["==", ["call", "upcase", "parseinput"], '"HELP"'],
                             ],
                             [
-                                ["out", "y"],
-                                "wri",
-                                ["buf", "lis", "nol", ["b", "bparsesyntax"]],
+                                ["setd", "out", "y"],
+                                ["print"],
+                                ["setd", ["buf", "lis", "nol"], ["b", "bparsesyntax"]],
                                 ["goto", "end"],
                             ],
                             *[
@@ -558,19 +575,24 @@ def expand_macro(program_input):
                                 ],
                             ],
                             [
-                                ["ver", "n"],
-                                ["out", "y"],
-                                "wri",
+                                ["setd", "ver", "n"],
+                                ["setd", "out", "y"],
+                                ["print"],
                                 [
-                                    "var",
-                                    "num",
-                                    "result",
-                                    ["cverror", '"Unrecognized input"', "0"],
+                                    "set",
+                                    [
+                                        "num",
+                                        "result",
+                                    ],
+                                    ["call", "cverror", '"Unrecognized input"', "0"],
                                 ],
-                                ["wri", ["concat", '"Invalid input: "', "parseinput"]],
-                                ["wri"],
-                                ["buf", "lis", "nol", ["b", "bparsesyntax"]],
-                                ["wri"],
+                                [
+                                    "print",
+                                    ["call","concat", '"Invalid input: "', "parseinput"],
+                                ],
+                                ["print"],
+                                ["setd", ["buf", "lis", "nol"], ["b", "bparsesyntax"]],
+                                ["print"],
                                 ["goto", "end"],
                             ],
                         ],
