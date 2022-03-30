@@ -13,6 +13,8 @@ arith_words = [
     "*",
     "/",
     "==",
+    "<=",
+    ">=",
     ">",
     "<",
     "~=",
@@ -213,7 +215,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         if len(exp) < 3:
             raise SyntaxError("Cannot parse array access: " + exp)
 
-        var_size = ",".join(exp[2:])
+        var_size = ",".join([list2codev(x) for x in exp[2:]])
         return f"{list2codev(exp[1])}({var_size})"
 
     elif exp[0] in ["fct", "fn", "defun"]:
@@ -278,7 +280,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         exp.pop(0)
 
     elif exp[0] in ["goto", "lbl", "label", "got"]:
-        return f"{sub('label','lbl',exp[0])} {exp[1]}"
+        return f"{sub('goto','got',sub('label','lbl',exp[0]))} {exp[1]}"
 
     elif exp[0] in loop_words:
         if len(exp) < 2:
@@ -288,7 +290,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         if exp[0] == "for":
             if not isinstance(exp[1], list) or len(exp[1]) < 3:
                 raise SyntaxError("Cannot parse for loop init")
-            start = f"{exp[0]} {list2codev(exp[1][0],scope=scope)} {' '.join([list2codev(x) for x in exp[1][1:]])}\n"
+            start = f"{exp[0]} {list2codev(['var',exp[1][0]],scope=scope)} {' '.join([list2codev(x) for x in exp[1][1:]])}\n"
         elif exp[0] == "while":
             start = f"{exp[0]} {list2codev(exp[1],scope=scope)}\n"
         elif exp[0] == "unt":
@@ -390,7 +392,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         if len(exp) == 1:
             return list2codev(exp[0], scope=scope)
         else:
-            return list2codev(["command"]+exp, scope=scope, indent=indent)
+            return list2codev(["command"] + exp, scope=scope, indent=indent)
             # raise SyntaxError("Cannot parse expr: " + str(exp_input))
 
     pre = "    ".join(["" for x in range(indent + 1)])
@@ -422,14 +424,15 @@ def expand_macro(program_input):
         program = codev_parse_input.sub(
             list2codev(
                 [
-                    ["setd", "buf.emp.find", "^parseinput"],
-                    ["setd", "buf.emp.find", "^parsesyntax"],
+                    ["setd", "buf.emp.find", "^parsebufinput"],
+                    ["setd", "buf.emp.find", "^parsebufsyntax"],
+                    ["setd", ["buf", "del"], ["b", "^parsebufsyntax"]],
                     [
                         "setd",
                         [
                             "buf",
                             "put",
-                            ["b", "^parsesyntax"],
+                            ["b", "^parsebufsyntax"],
                             ["raw", '"il+1"'],
                             ["j", "1"],
                         ],
@@ -440,7 +443,7 @@ def expand_macro(program_input):
                         [
                             "buf",
                             "put",
-                            ["b", "^parsesyntax"],
+                            ["b", "^parsebufsyntax"],
                             ["raw", '"il+1"'],
                             ["j", "1"],
                         ],
@@ -451,31 +454,36 @@ def expand_macro(program_input):
                         [
                             "buf",
                             "put",
-                            ["b", "^parsesyntax"],
+                            ["b", "^parsebufsyntax"],
                             ["raw", '"il+1"'],
                             ["j", "1"],
                         ],
                         f'''"syntax: {parse_func_name} {' '.join(parse_inputs[2])} <----- uses numeric inputs in this order only "''',
                     ],
-                    ["setd", ["buf", "del"], ["b", "^parseinput"]],
+                    ["setd", ["buf", "del"], ["b", "^parsebufinput"]],
                     [
                         "for",
-                        ["input", "1", str(len(parse_inputs) - 1)],
+                        ["i", "1", str(len(parse_inputs) - 2)],
                         [
                             "setd",
                             [
                                 "buf",
                                 "put",
-                                ["b", "^parseinput"],
+                                ["b", "^parsebufinput"],
                                 ["raw", '"il+1"'],
                             ],
-                            [".", "rfstr", "input"],
+                            [".", "rfstr", ["var", "i"]],
                         ],
                     ],
-                    ["in", '"cv_macro:ParseInputs.seq"', ["b", ["var", "parseinput"]]],
+                    # ["wri", ["database", "buf", "^parsebufinput", "il"]],
+                    [
+                        "in",
+                        '"cv_macro:ParseInputs.seq"',
+                        ["var", "parsebufinput"],
+                    ],
                     [
                         "for",
-                        ["i", "1", ["database", "buf.lst", ["b", "^parseinput"]]],
+                        ["i", "1", ["database", "buf.lst", ["b", "^parsebufinput"]]],
                         [
                             "set",
                             [
@@ -485,7 +493,7 @@ def expand_macro(program_input):
                             [
                                 "database",
                                 "buf.str",
-                                ["b", "^parseinput"],
+                                ["b", "^parsebufinput"],
                                 ["i", "^i"],
                                 ["j", "1"],
                             ],
@@ -499,7 +507,7 @@ def expand_macro(program_input):
                             [
                                 "database",
                                 "buf.str",
-                                ["b", "^parseinput"],
+                                ["b", "^parsebufinput"],
                                 ["i", "^i"],
                                 ["j", "2"],
                             ],
@@ -516,7 +524,7 @@ def expand_macro(program_input):
                                 [
                                     "database",
                                     "buf.str",
-                                    ["b", "^parseinput"],
+                                    ["b", "^parsebufinput"],
                                     ["i", "^i"],
                                     ["j", "3"],
                                 ],
@@ -540,14 +548,22 @@ def expand_macro(program_input):
                             [
                                 ["setd", "out", "y"],
                                 ["print"],
-                                ["setd", ["buf", "lis", "nol"], ["b", "^parsesyntax"]],
+                                [
+                                    "setd",
+                                    ["buf", "lis", "nol"],
+                                    ["b", "^parsebufsyntax"],
+                                ],
                                 ["goto", "end"],
                             ],
                             *[
                                 item
                                 for sublist in zip(
                                     [
-                                        ["==", "^parsequalifier", x.upper()]
+                                        [
+                                            "==",
+                                            "^parsequalifier",
+                                            rf'''"{x.upper().replace('"','')}"''',
+                                        ]
                                         for x in parse_inputs[0]
                                     ],
                                     [
@@ -597,7 +613,11 @@ def expand_macro(program_input):
                                     ],
                                 ],
                                 ["print"],
-                                ["setd", ["buf", "lis", "nol"], ["b", "^parsesyntax"]],
+                                [
+                                    "setd",
+                                    ["buf", "lis", "nol"],
+                                    ["b", "^parsebufsyntax"],
+                                ],
                                 ["print"],
                                 ["goto", "end"],
                             ],
