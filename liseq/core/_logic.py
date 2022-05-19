@@ -353,13 +353,15 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             )
 
     elif exp[0] in arith_trans.keys():
-        if len(exp) != 3 or exp[0] not in arith_trans.keys():
+        if len(exp) not in (3, 2) or exp[0] not in arith_trans.keys():
             raise SyntaxError(
                 "Arithmetic statement must be of the form (arith arg1 arg2): "
                 + str(exp)
             )
         # elif len(exp) >= 4:
         #     raise SyntaxError("Cannot parse s-expr arithmetics")
+        if len(exp) == 2:
+            return f"{exp[0]} {list2codev(exp[1], scope=scope, indent=0)}"
         if arith_trans[exp[0]] == ".." or (
             isinstance(exp[1], list)
             and len(exp[1]) == 2
@@ -385,9 +387,15 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         return f"{'(' if dist!=0 else ''}{parentflag1[0]}{list2codev(exp[1],indent=0,scope=scope) if not isinstance(exp[1],str) or not attr_match(exp[1]) else exp[1]}{parentflag1[1]}{' '*dist}{arith_trans[exp[0]]}{' '*dist}{parentflag2[0]}{list2codev(exp[2],indent=0,scope=scope) if not isinstance(exp[2],str) or not attr_match(exp[2]) else exp[2]}{parentflag2[1]}{')' if dist!=0 else ''}"
 
     elif special_letter_match(exp[0]):
-        if len(exp) != 2:
-            raise SyntaxError("Arguments must be only 2: " + exp)
-        return f"{exp[0]}{exp[1] if isinstance(exp[1], str) and special_letter_match(exp[1]) else list2codev(exp[1])}"
+        if len(exp) < 2:
+            raise SyntaxError("Arguments must be larger 2: " + exp)
+        if len(exp) == 2:
+            return f"{exp[0]}{exp[1] if isinstance(exp[1], str) and special_letter_match(exp[1]) else list2codev(exp[1])}"
+        elif exp[0] == "s":
+            return f"{exp[0]} {' '.join([list2codev(x) for x in exp[1:]])}"
+        else:
+            print(exp[0])
+            raise SyntaxError("Not a known case for single letter expression" + exp)
     else:
         if len(exp) == 1:
             return list2codev(exp[0], scope=scope)
