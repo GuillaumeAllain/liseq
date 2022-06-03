@@ -120,7 +120,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                 [
                     [
                         [
-                            ["set", ["nth", list2codev(e), str(xi + 1)], list2codev(x)]
+                            ["set", ["nth", str(xi + 1), list2codev(e)], list2codev(x)]
                             for xi, x in enumerate(exp[2])
                         ]
                         for ei, e in enumerate(exp[1])
@@ -135,7 +135,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                             [
                                 [
                                     "set",
-                                    ["nth", list2codev(e), str(yi + 1), str(xi + 1)],
+                                    ["nth", str(yi + 1), str(xi + 1), list2codev(e)],
                                     list2codev(x[yi]),
                                 ]
                                 for xi, x in enumerate(exp[2])
@@ -215,8 +215,8 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         if len(exp) < 3:
             raise SyntaxError("Cannot parse array access: " + exp)
 
-        var_size = ",".join([list2codev(x) for x in exp[2:]])
-        return f"{list2codev(exp[1])}({var_size})"
+        var_size = ",".join([list2codev(x) for x in exp[1:-1]])
+        return f"{list2codev(exp[-1])}({var_size})"
 
     elif exp[0] in ["fct", "fn", "defun"]:
         if len(exp) < 3:
@@ -271,7 +271,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         exp.pop(0)
         exp.pop(0)
 
-    elif exp[0] == "command":
+    elif exp[0] in ("command", "cmd"):
         start = exp[1] + " "
         join = " "
         close = " "
@@ -362,10 +362,10 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         #     raise SyntaxError("Cannot parse s-expr arithmetics")
         if len(exp) == 2:
             return f"{exp[0]} {list2codev(exp[1], scope=scope, indent=0)}"
-        if arith_trans[exp[0]] == ".." or (
-            isinstance(exp[1], list)
-            and len(exp[1]) == 2
-            and special_letter_match(exp[1][0])
+        if (
+            arith_trans[exp[0]] == ".."
+            or isinstance(exp[1], list)
+            or (len(exp[1]) == 2 and special_letter_match(exp[1][0]))
         ):
             dist = 0
         else:
