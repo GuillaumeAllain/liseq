@@ -5,13 +5,7 @@ from re import sub, compile, findall, search, escape, MULTILINE
 from copy import copy
 
 loop_words = ["for", "while", "unt"]
-arith_words = [
-    "..",
-    "+",
-    "-",
-    "**",
-    "*",
-    "/",
+bool_list = [
     "==",
     "<=",
     ">=",
@@ -21,6 +15,14 @@ arith_words = [
     "not=",
     "and",
     "or",
+]
+arith_words = bool_list + [
+    "..",
+    "+",
+    "-",
+    "**",
+    "*",
+    "/",
 ]
 arith_trans = {}
 for words in arith_words:
@@ -364,9 +366,9 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             return f"{exp[0]} {list2codev(exp[1], scope=scope, indent=0)}"
         if (
             arith_trans[exp[0]] == ".."
-            or isinstance(exp[1], list)
+            or (isinstance(exp[1], list) and exp[1][0] != "var")
             or (len(exp[1]) == 2 and special_letter_match(exp[1][0]))
-        ):
+        ) and exp[0] not in bool_list:
             dist = 0
         else:
             dist = 1

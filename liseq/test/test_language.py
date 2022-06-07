@@ -18,6 +18,9 @@ class Language_test(unittest.TestCase):
     #     self.assertEqual("3", transpiler("(3)"))
     pass
 
+    def test_test(a):
+        assert True
+
     # TODO: Goto test
     # TODO: macro test
     # TODO: Tset tests

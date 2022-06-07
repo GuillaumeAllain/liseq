@@ -17,15 +17,15 @@ class Set_test(unittest.TestCase):
         )
 
     def test_number_var_attribution_array(self):
-        self.assertEqual("^foovar(3) == 3", transpiler("(setq (nth foovar 3) 3)"))
+        self.assertEqual("^foovar(3) == 3", transpiler("(setq (nth 3 foovar) 3)"))
         self.assertEqual(
-            '^foovar(3,4) == "neuf"', transpiler('(setq (nth foovar 3 4) "neuf")')
+            '^foovar(3,4) == "neuf"', transpiler('(setq (nth  3 4 foovar) "neuf")')
         )
 
     def test_number_var_attribution_multiple_array(self):
         self.assertEqual(
             '^foovar(3) == 3\n^barvar(4,5) == "huit"',
-            transpiler('(setq (nth foovar 3) 3 (nth barvar 4 5) "huit")'),
+            transpiler('(setq (nth 3 foovar) 3 (nth  4 5 barvar) "huit")'),
         )
 
     def test_var_declaration_attribution(self):
@@ -37,11 +37,11 @@ class Set_test(unittest.TestCase):
     def test_var_declaration_attribution_array(self):
         self.assertEqual(
             "lcl num ^foovar(3)\n^foovar(3) == 3",
-            transpiler("(setq (num (nth foovar 3)) 3)"),
+            transpiler("(setq (num (nth 3 foovar)) 3)"),
         )
         self.assertEqual(
             'lcl str ^foovar(3,4)\n^foovar(3,4) == "huit"',
-            transpiler('(setq (str (nth foovar 3 4)) "huit")'),
+            transpiler('(setq (str (nth 3 4 foovar)) "huit")'),
         )
 
     def test_database_attribution(self):
@@ -66,14 +66,14 @@ class Set_test(unittest.TestCase):
         )
         self.assertEqual(
             "fct @test(num ^arg1(3,4), str ^arg2(3))\n" "end fct ^arg1",
-            transpiler("(defun test ((num (nth arg1 3 4))(str (nth arg2 3))) (arg1))"),
+            transpiler("(defun test ((num (nth  3 4 arg1))(str (nth 3 arg2))) (arg1))"),
         )
         self.assertEqual(
             "fct @test(num ^arg1(10), str ^arg2(3))\n"
             "    lcl num ^outputvar\n    ^outputvar == 0\n"
             "end fct ^outputvar",
             transpiler(
-                "(defun test ((num (nth arg1 10))(str (nth arg2 3))) (setq (num outputvar) 0) (outputvar))"
+                "(defun test ((num (nth 10 arg1))(str (nth 3 arg2))) (setq (num outputvar) 0) (outputvar))"
             ),
         )
         self.assertEqual(
@@ -86,8 +86,8 @@ class Set_test(unittest.TestCase):
             ),
             sorted(
                 transpiler(
-                    "(defun test ((num (nth arg1 10))(str (nth arg2 3)))"
-                    ' (local num scope1 (. scope2 3 4)) (setq (str scope3) "test") (outputvar))'
+                    "(defun test ((num (nth 10 arg1 ))(str (nth 3 arg2)))"
+                    ' (local num scope1 (.  3 4 scope2)) (setq (str scope3) "test") (outputvar))'
                 )
             ),
         )
@@ -98,11 +98,11 @@ class Set_test(unittest.TestCase):
         # self.assertEqual(("num ^foovar(3,4) ^barvar(3,4)"),(transpiler("((. num 3 4) foovar barvar)")))
         self.assertEqual(
             set("lcl num ^foovar(3,4) ^barvar(4,5)"),
-            set(transpiler("(num (. foovar 3 4) (. barvar 4 5))")),
+            set(transpiler("(num (.  3 4 foovar) (. 4 5 barvar ))")),
         )
-        self.assertEqual("lcl num ^foovar(4)", transpiler("(local num (. foovar 4))"))
+        self.assertEqual("lcl num ^foovar(4)", transpiler("(local num (. 4 foovar ))"))
         self.assertEqual(
-            "lcl num ^foovar(2,5)", transpiler("(local num (. foovar 2 5))")
+            "lcl num ^foovar(2,5)", transpiler("(local num (.  2 5 foovar))")
         )
         self.assertEqual(
             sorted("lcl num ^foovar ^barvar"),
@@ -110,7 +110,7 @@ class Set_test(unittest.TestCase):
         )
         self.assertEqual(
             sorted("lcl num ^foovar(3) ^barvar(4)"),
-            sorted(transpiler("(local num (. foovar 3) (. barvar 4))")),
+            sorted(transpiler("(local num (. 3 foovar ) (. 4 barvar ))")),
         )
 
 if __name__ == "__main__":

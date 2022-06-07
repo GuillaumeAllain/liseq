@@ -9,7 +9,9 @@ class Loop_test(unittest.TestCase):
     def test_if_2arg(self):
         self.assertEqual(
             "if (^foo = 2)\n    ^barvar == 2\n    ^barvar == (^barvar + 1)\nend if",
-            transpiler("(if (== (var foo) 2) ((set barvar 2)(set barvar (+ (var barvar) 1))))"),
+            transpiler(
+                "(if (== (var foo) 2) ((set barvar 2)(set barvar (+ (var barvar) 1))))"
+            ),
         )
 
     def test_if_2argelse(self):
@@ -96,7 +98,7 @@ class Loop_test(unittest.TestCase):
         self.assertEqual(
             "fct @test(num ^arg1(3,4), str ^arg2(3))\n" "end fct ^outputvar",
             transpiler(
-                "(fct test ((num (nth arg1 3 4))(str (nth arg2 3))) () (outputvar))"
+                "(fct test ((num (nth 3 4 arg1))(str (nth 3 arg2))) () (outputvar))"
             ),
         )
         self.assertEqual(
@@ -104,7 +106,7 @@ class Loop_test(unittest.TestCase):
             "    wri 3\n    (x r1 s1)\n"
             "end fct ^outputvar",
             transpiler(
-                "(fct test ((num (. arg1 10))(str (nth arg2 3))) (print 3) (database x (r 1) (s 1)) (outputvar))"
+                "(fct test ((num (. 10 arg1))(str (nth 3 arg2))) (print 3) (database x (r 1) (s 1)) (outputvar))"
             ),
         )
         self.assertEqual(
