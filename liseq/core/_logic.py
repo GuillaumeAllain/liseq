@@ -221,22 +221,25 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         return f"{list2codev(exp[-1])}({var_size})"
 
     elif exp[0] in ["fct", "fn", "defun"]:
-        if len(exp) < 3:
+        if len(exp) < 4:
             raise SyntaxError(
-                """Function statement must contain at least 3 args,
+                """Function statement must contain at least 4 args,
                     (defun fun_name ((arg1 def) [arg2 def] ...) body (return_variable)):"""
                 + str(exp)
             )
-        exp[2] = (
-            [x if isinstance(x, list) else ["num", x] for x in exp[2]]
-            if isinstance(exp[2], list)
-            else ["num", exp[2]]
-        )
-        args = (
-            ", ".join([list2codev(x, scope="fundef") for x in exp[2]])
-            if isinstance(exp[2][0], list)
-            else list2codev(exp[2], scope="fundef")
-        )
+        if exp[2] == ['nil']:
+            args = ''
+        else:
+            exp[2] = (
+                [x if isinstance(x, list) else ["num", x] for x in exp[2]]
+                if isinstance(exp[2], list)
+                else ["num", exp[2]]
+            )
+            args = (
+                ", ".join([list2codev(x, scope="fundef") for x in exp[2]])
+                if isinstance(exp[2][0], list)
+                else list2codev(exp[2], scope="fundef")
+            )
         start = f"{indent_whitespace(indent)}fct @{exp[1]}({args})\n"
         join = "\n"
         close = f"\n{indent_whitespace(indent)}end fct {list2codev(['var'] + [exp[-1],],scope=scope)}"
@@ -711,11 +714,13 @@ def move_def_to_top(program_input):
     program = copy(program_input)
     lclstr = compile(r"^\s*lcl\sstr.*", MULTILINE)
     lclnum = compile(r"^\s*lcl\snum.*", MULTILINE)
+    drofct = compile(r"^\s*dro\sfct.*", MULTILINE)
     # lclfctget = compile(r"(^\s*fct.*)", MULTILINE)
     # fct_local_get = lclfctget.findall(program)
 
     str_def = lclstr.findall(program)
     num_def = lclnum.findall(program)
+    drofct_def = drofct.findall(program)
     definitions = (
         f"lcl str {' '.join(set([y for x in str_def for y in x.split()[2:]]))}\n"
         if len(str_def) > 0
@@ -726,12 +731,17 @@ def move_def_to_top(program_input):
         if len(num_def) > 0
         else ""
     )
+    definitions += (
+        f"dro fct {' '.join(set([y for x in drofct_def for y in x.split()[2:]]))}\n"
+        if len(drofct_def) > 0
+        else ""
+    )
 
     if search("rfd.*", program.split("\n")[0]):
         first_line = program.split("\n")[0]
         program = sub(escape(first_line), "", program)
         definitions = first_line + "\n" + definitions
-    program = f"""{definitions}{lclnum.sub("", lclstr.sub("", program))}"""
+    program = f"""{definitions}{drofct.sub("",lclnum.sub("", lclstr.sub("", program)))}"""
     fct_local_get = findall(r"(^\s*fct.*)", program, MULTILINE)
     fct_local_get = fct_local_get
     fct_index = [
