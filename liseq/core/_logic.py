@@ -148,6 +148,17 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                     ]
                 ]
             )
+    elif exp[0] in ["arg"]:
+        if len(exp) < 2:
+            raise SyntaxError("Arg statement should at least contain one variable")
+        return list2codev(
+            [
+                y if y.startswith("#") else "#" + y
+                for y in [list2codev(x) for x in exp[1:]]
+            ],
+            scope=scope,
+            indent=indent,
+        )
     elif exp[0] in ["var"]:
         if len(exp) < 2:
             raise SyntaxError("Var statement should at least contain one variable")
@@ -227,8 +238,8 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                     (defun fun_name ((arg1 def) [arg2 def] ...) body (return_variable)):"""
                 + str(exp)
             )
-        if exp[2] == ['nil']:
-            args = ''
+        if exp[2] == ["nil"]:
+            args = ""
         else:
             exp[2] = (
                 [x if isinstance(x, list) else ["num", x] for x in exp[2]]
@@ -240,7 +251,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                 if isinstance(exp[2][0], list)
                 else list2codev(exp[2], scope="fundef")
             )
-        start = f"{indent_whitespace(indent)}fct @{exp[1]}({args})\n"
+        start = f"{indent_whitespace(indent)}fct @{exp[1]}{'(' if args != '' else ''}{args}{')' if args != '' else ''}\n"
         join = "\n"
         close = f"\n{indent_whitespace(indent)}end fct {list2codev(['var'] + [exp[-1],],scope=scope)}"
         exp.pop(0)
@@ -306,8 +317,18 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         indent += 1
 
     elif "dro" in exp[0]:
-        return "dro ^" + " ^".join(exp[1:])
+        if len(exp) < 3:
+            raise SyntaxError("Cannot parse drop")
+        if str(exp[1]).lower() not in ("fct", "gbl", "rec", "lcl"):
+            raise SyntaxError(
+                f'Second argument of drop must be in {str(["fct", "gbl", "rec", "lcl"])}'
+            )
 
+        funcs = (
+            f'{"@" if exp[1].lower() == "fct" else "^"}'
+            + f' {"@" if exp[1].lower() == "fct" else "^"}'.join(exp[2:])
+        )
+        return f"dro {exp[1]} {funcs}"
     elif exp[0] == "not":
         start = "not("
         close = ")"
@@ -425,6 +446,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
 def expand_macro(program_input):
     program = copy(program_input)
     codev_parse_input = compile(r"codev.parseinput(.*)")
+    # (codev.parseinput func_name (s svar "[sk]"))
     if len(codev_parse_input.findall(program)) > 0:
         parse_inputs = findall(
             r'(?:"[\w\s]+")|(?:\w+)', codev_parse_input.findall(program)[0]
@@ -485,7 +507,7 @@ def expand_macro(program_input):
                                 ["b", "^parsebufinput"],
                                 ["raw", '"il+1"'],
                             ],
-                            [".", "rfstr", ["var", "i"]],
+                            ["nth", ["var", "i"], "rfstr"],
                         ],
                     ],
                     # ["wri", ["database", "buf", "^parsebufinput", "il"]],
@@ -741,7 +763,9 @@ def move_def_to_top(program_input):
         first_line = program.split("\n")[0]
         program = sub(escape(first_line), "", program)
         definitions = first_line + "\n" + definitions
-    program = f"""{definitions}{drofct.sub("",lclnum.sub("", lclstr.sub("", program)))}"""
+    program = (
+        f"""{definitions}{drofct.sub("",lclnum.sub("", lclstr.sub("", program)))}"""
+    )
     fct_local_get = findall(r"(^\s*fct.*)", program, MULTILINE)
     fct_local_get = fct_local_get
     fct_index = [
