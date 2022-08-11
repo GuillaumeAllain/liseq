@@ -11,10 +11,9 @@ bool_list = [
     ">=",
     ">",
     "<",
-    "~=",
-    "not=",
     "and",
     "or",
+    "<>"
 ]
 arith_words = bool_list + [
     "..",
@@ -23,14 +22,17 @@ arith_words = bool_list + [
     "**",
     "*",
     "/",
+    
 ]
 arith_trans = {}
 for words in arith_words:
     arith_trans[words] = words
-arith_trans["=="] = "="
+# arith_trans["=="] = "="
+# arith_trans["eq"] = "="
 arith_trans["from"] = ".."
 arith_trans["to"] = ".."
-arith_trans.update(dict.fromkeys(["~=", "not="], "<>"))
+arith_trans.update(dict.fromkeys(["~=", "not=", "neq"], "<>"))
+arith_trans.update(dict.fromkeys(["==", "eq"], "="))
 keywords = ["yes", "no", "n", "y", "true", "false", "if", "else", "m", "t"]
 arith_symbols = [
     x for x in [sub(f"[{alphas}]+", "", y) for y in arith_trans.keys()] if x
@@ -284,6 +286,8 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         join = "\n"
         close = "\ngo"
         indent += 1
+        if exp[1] == "aut":
+            scope = "aut"
         exp.pop(0)
         exp.pop(0)
 
@@ -378,22 +382,31 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                 + f"{indent_whitespace(indent)}end if"
             )
 
-    elif exp[0] in arith_trans.keys():
+    elif exp[0] in (set(arith_trans.keys()) | set(arith_words)):
         if len(exp) not in (3, 2) or exp[0] not in arith_trans.keys():
             raise SyntaxError(
                 "Arithmetic statement must be of the form (arith arg1 arg2): "
                 + str(exp)
             )
-        # elif len(exp) >= 4:
-        #     raise SyntaxError("Cannot parse s-expr arithmetics")
         if len(exp) == 2:
             return f"{exp[0]} {list2codev(exp[1], scope=scope, indent=0)}"
         if (
-            arith_trans[exp[0]] == ".."
-            or (isinstance(exp[1], list) and exp[1][0] != "var")
-            or (len(exp[1]) == 2 and special_letter_match(exp[1][0]))
-        ) and exp[0] not in bool_list:
+            (
+                arith_trans[exp[0]] == ".."
+                or (isinstance(exp[1], list) and exp[1][0] != "var")
+                or (len(exp[1]) == 2 and special_letter_match(exp[1][0]))
+            )
+            and (arith_trans[exp[0]] not in bool_list)
+        ) or (
+            (scope == "aut")
+            and (
+                (exp[1][0] == "cmd")
+                if (not isinstance(exp[1], str) and len(exp[1]) > 2)
+                else False
+            )
+        ):
             dist = 0
+
         else:
             dist = 1
         parentflag1 = (
