@@ -1,5 +1,6 @@
 import argparse
 from liseq.core import transpiler
+from liseq.util import open_file
 
 parser = argparse.ArgumentParser(
     description="Transpile s-exp to macro-plus CODEV language."
@@ -19,9 +20,7 @@ args = parser.parse_args()
 
 
 def main():
-    with open(args.filename, "r") as file:
-        program = file.read()
-    output_string = transpiler(program)
+    output_string = transpiler(open_file(args.filename))
     if args.output is not None:
         with open(args.output, "w") as file:
             file.write(output_string)

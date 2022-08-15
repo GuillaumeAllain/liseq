@@ -3,18 +3,11 @@ __version__ = "1.0"
 from pyparsing.helpers import nested_expr, alphas
 from re import sub, compile, findall, search, escape, MULTILINE
 from copy import copy
+from liseq.macro import macro_dict
+from liseq.util import liseq_to_list
 
 loop_words = ["for", "while", "unt"]
-bool_list = [
-    "==",
-    "<=",
-    ">=",
-    ">",
-    "<",
-    "and",
-    "or",
-    "<>"
-]
+bool_list = ["==", "<=", ">=", ">", "<", "and", "or", "<>"]
 arith_words = bool_list + [
     "..",
     "+",
@@ -22,7 +15,6 @@ arith_words = bool_list + [
     "**",
     "*",
     "/",
-    
 ]
 arith_trans = {}
 for words in arith_words:
@@ -40,6 +32,10 @@ arith_symbols = [
 special_letter_match = lambda exp: bool(compile(r"[abcefgijolqrstuwz]$").match(exp))
 attr_match = lambda exp: bool(compile(r"[\dacilos]$").match(exp))
 string_match = lambda exp: not exp == exp.replace('"', "") or exp.startswith(":")
+
+
+plt_options = ["vie", "fie"]
+ras_options = ["v3d"]
 
 
 def is_number(s):
@@ -172,6 +168,12 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             scope=scope,
             indent=indent,
         )
+    elif exp[0] in macro_dict.keys():
+        args = {}
+        if len(exp) >= 2:
+            for i, arg in enumerate(exp[1:]):
+                args[f"__codev_arg{str(i+1)}"] = arg
+        return list2codev(macro_dict[exp[0]](args))
     elif exp[0] in ["set", "setq"]:
         if len(exp[1:]) % 2:
             raise SyntaxError("Cannot parse set statement: " + str(exp))
@@ -276,15 +278,52 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         exp.pop(0)
         exp.pop(0)
     elif exp[0] in ["load", "require", "in"]:
+        if len(exp) < 2:
+            raise SyntaxError(f"Cannot parse load statement: {str(exp)}")
         start = "in "
+        close = " "
+        if "cv_macro" in exp[1]:
+            close = "\nout ^__cv_macro_orig_out"
+            start = (
+                list2codev(
+                    [
+                        "if",
+                        ["database", "out"],
+                        ["set", ["str", "__cv_macro_orig_out"], '"y"'],
+                        ["set", "__cv_macro_orig_out", '"n"'],
+                    ]
+                )
+                + "\n"
+                + start
+            )
         exp.pop(0)
     elif exp[0] in ["print", "format", "wri"]:
-        start = "wri "
+        start = (
+            list2codev(
+                [
+                    "if",
+                    ["database", "out"],
+                    ["set", ["str", "__cv_macro_orig_out"], '"y"'],
+                    ["set", "__cv_macro_orig_out", '"n"'],
+                ]
+            )
+            + "\nout y\n"
+            + "wri "
+        )
+        # start = "wri "
+        close = "\nout ^__cv_macro_orig_out"
         exp.pop(0)
     elif exp[0] == "option":
         start = exp[1] + "\n"
         join = "\n"
         close = "\ngo"
+        close += (
+            "; ras"
+            if exp[1] in ras_options
+            else "; plt"
+            if exp[1] in plt_options
+            else ""
+        )
         indent += 1
         if exp[1] == "aut":
             scope = "aut"
@@ -390,6 +429,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             )
         if len(exp) == 2:
             return f"{exp[0]} {list2codev(exp[1], scope=scope, indent=0)}"
+
         if (
             (
                 arith_trans[exp[0]] == ".."
@@ -401,7 +441,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             (scope == "aut")
             and (
                 (exp[1][0] == "cmd")
-                if (not isinstance(exp[1], str) and len(exp[1]) > 2)
+                if (not isinstance(exp[1], str) and len(exp[1]) > 1)
                 else False
             )
         ):
@@ -433,7 +473,6 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         elif exp[0] == "s":
             return f"{exp[0]} {' '.join([list2codev(x) for x in exp[1:]])}"
         else:
-            print(exp[0])
             raise SyntaxError("Not a known case for single letter expression" + exp)
     else:
         if len(exp) == 1:
@@ -601,7 +640,7 @@ def expand_macro(program_input):
                                     ["buf", "lis", "nol"],
                                     ["b", "^parsebufsyntax"],
                                 ],
-                                ["goto", "end"],
+                                ["goto", "__codev_end"],
                             ],
                             *[
                                 item
@@ -667,7 +706,7 @@ def expand_macro(program_input):
                                     ["b", "^parsebufsyntax"],
                                 ],
                                 ["print"],
-                                ["goto", "end"],
+                                ["goto", "__codev_end"],
                             ],
                         ],
                     ],
@@ -711,16 +750,16 @@ def expand_macro(program_input):
                     [
                         "if",
                         ["database", "out"],
-                        ["set", ["str", "origoutsetting"], '"y"'],
-                        ["set", "origoutsetting", '"n"'],
+                        ["set", ["str", "__suppress_orig_out"], '"y"'],
+                        ["set", "__suppress_orig_out", '"n"'],
                     ],
-                    ["set", ["str", "outvar"], '"n"'],
-                    ["setd", "out", ["var", "outvar"]],
+                    ["set", ["str", "__suppress_out"], '"n"'],
+                    ["setd", "out", ["var", "__suppress_out"]],
                     [
                         "if",
                         ["database", "ver"],
-                        ["set", ["str", "origverSetting"], '"y"'],
-                        ["set", "origversetting", '"n"'],
+                        ["set", ["str", "__suppress_orig_ver"], '"y"'],
+                        ["set", "__suppress_orig_ver", '"n"'],
                     ],
                     ["setd", "ver", "n"],
                 ]
@@ -733,15 +772,19 @@ def expand_macro(program_input):
     if codev_supress_macro.findall(program_start) != []:
         add_out = list2codev(
             [
-                ["setd", "out", ["var", "origoutsetting"]],
-                ["if", ["==", ["var", "origversetting"], '"y"'], ["setd", "ver", "y"]],
+                ["setd", "out", ["var", "__suppress_orig_out"]],
+                [
+                    "if",
+                    ["==", ["var", "__suppress_orig_ver"], '"y"'],
+                    ["setd", "ver", "y"],
+                ],
             ]
         )
         lblend = f"{lblend}\n{add_out}"
-    if findall("lbl end", program):
-        program = sub("lbl end", f"lbl end\n{lblend}", program)
+    if findall("lbl __codev_end", program):
+        program = sub("lbl __codev_end", f"lbl __codev_end\n{lblend}", program)
     else:
-        program = f"{program}\nlbl end\n{lblend}" if lblend != "" else program
+        program = f"{program}\nlbl __codev_end\n{lblend}" if lblend != "" else program
     return program
 
 
@@ -813,10 +856,5 @@ def move_def_to_top(program_input):
 
 
 def transpiler(program):
-    program = "\n".join(
-        [x for x in program.split("\n") if not x.lstrip().startswith(";")]
-    )
-    program = sub(r"\[", r"(", program)
-    program = sub(r"]", ")", program)
-    ast = nested_expr().parseString(f"({program})")[0].asList()
+    ast = liseq_to_list(program)
     return move_def_to_top(expand_macro(list2codev(ast)))

@@ -1,0 +1,18 @@
+(set (nth 1 __codev_rename_fig_buf) ({__codev_arg1}))
+(str (nth 3 __codev_rename_fig_buf))
+(for [__codev_rename_fig_j 1 2]
+  (if (eq (var __codev_rename_fig_j) 1) (set (nth 2 __codev_rename_fig_buf) (:_plt))
+      (set (nth 2 __codev_rename_fig_buf) (:_ras)))
+  (for [__codev_rename_fig_i 1 2]
+    (if (eq (var __codev_rename_fig_i) 1) (set (nth 3 __codev_rename_fig_buf) :.eps)
+  (if (eq (var __codev_rename_fig_j) 1)
+        (set (nth 3 __codev_rename_fig_buf) :.plt) (set (nth 3 __codev_rename_fig_buf) :.ras))
+        )
+    (set (str __codev_rename_fig_sysout)
+         (call concat "rm -rf " (call join (var __codev_rename_fig_buf) "" 1 3)))
+    (sys (var __codev_rename_fig_sysout)))
+  (if (eq (var __codev_rename_fig_j) 1)
+      ((gra t (call join (var __codev_rename_fig_buf) "" 1 3)) (dev plt
+                                                                    cepsfile))
+      ((rgr t (call join (var __codev_rename_fig_buf) "" 1 3)) (dev ras
+                                                                    cepsfile))))
