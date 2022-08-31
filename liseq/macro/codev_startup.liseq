@@ -1,0 +1,32 @@
+(if (database out) (set (str __liseq_startup_orig_out) :y)
+    (set __liseq_startup_orig_out :n))
+
+(out n)
+(rec n)
+(ver n)
+
+;; System dimensions (mm)
+(dim m)
+;; File versionning
+(fvr n)
+
+;; Delete all possible conflicting files
+(option lib (del :codev.*) (del :fig/codev.*.plt) (del :fig/codev.*.ras)
+        (del :data/codev.*.lis) (del :fig/codev.*.eps))
+
+(sys "md fig >nul 2>&1")
+(sys "md data >nul 2>&1")
+
+;; Dont print date/time on graphics
+(tad n)
+;; Disable printing of charts on screen
+(dcs n)
+;; Redirect printing to this file
+(gra t :fig/codev.plt)
+(rgr t :fig/codev.ras)
+;; Define eps output
+(dev plt cepsfile)
+(dev ras cepsfile)
+
+(ver n)
+(out t :data/codev.lis)

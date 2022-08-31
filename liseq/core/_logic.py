@@ -1,13 +1,13 @@
 __version__ = "1.0"
 
-from pyparsing.helpers import nested_expr, alphas
+from pyparsing.helpers import alphas
 from re import sub, compile, findall, search, escape, MULTILINE
 from copy import copy
 from liseq.macro import macro_dict
 from liseq.util import liseq_to_list
 
 loop_words = ["for", "while", "unt"]
-bool_list = ["==", "<=", ">=", ">", "<", "and", "or", "<>"]
+bool_list = ["=", "<=", ">=", ">", "<", "and", "or", "<>"]
 arith_words = bool_list + [
     "..",
     "+",
@@ -34,7 +34,7 @@ attr_match = lambda exp: bool(compile(r"[\dacilos]$").match(exp))
 string_match = lambda exp: not exp == exp.replace('"', "") or exp.startswith(":")
 
 
-plt_options = ["vie", "fie"]
+plt_options = ["vie", "fie", "rim", "foo"]
 ras_options = ["v3d"]
 
 
@@ -84,10 +84,10 @@ def list2codev(exp_input, indent=0, scope="lcl"):
 
         if exp == "nil":
             return ""
-        elif arith_bool:
+        elif arith_bool and not (exp.startswith("`") or exp.startswith("'")):
             return list2codev(arith_output)
         else:
-            if exp.startswith(":"):
+            if exp.startswith(":") or exp.startswith("`") or exp.startswith("'"):
                 return f'"{exp[1:]}"'
             else:
                 return exp
@@ -107,6 +107,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             #     raise SyntaxError("Cannot parse substring: "+str(exp))
         return " ".join(exp[1:])
     elif exp[0] in ["tset"]:
+        # FIXME: Tablename (var quelquechos)
         if isinstance(exp[1], str):
             exp[1] = [
                 exp[1],
@@ -121,6 +122,8 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                     [
                         [
                             ["set", ["nth", str(xi + 1), list2codev(e)], list2codev(x)]
+                            if e != "var"
+                            else []
                             for xi, x in enumerate(exp[2])
                         ]
                         for ei, e in enumerate(exp[1])
@@ -135,7 +138,9 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                             [
                                 [
                                     "set",
-                                    ["nth", str(yi + 1), str(xi + 1), list2codev(e)],
+                                    ["nth", str(yi + 1), str(xi + 1), list2codev(e)]
+                                    if e != "var"
+                                    else [],
                                     list2codev(x[yi]),
                                 ]
                                 for xi, x in enumerate(exp[2])
@@ -185,7 +190,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                 )
 
                 var = var[1]
-            output_string += f"{list2codev(['var',var],scope=scope)} == {list2codev(val,scope=scope)}\n"
+            output_string += f"{list2codev(['var',var] if var[0]!='@' else var,scope=scope)} == {list2codev(val,scope=scope)}\n"
         return output_string
 
     elif exp[0] in ["setd"]:
@@ -283,35 +288,12 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         start = "in "
         close = " "
         if "cv_macro" in exp[1]:
-            close = "\nout ^__cv_macro_orig_out"
-            start = (
-                list2codev(
-                    [
-                        "if",
-                        ["database", "out"],
-                        ["set", ["str", "__cv_macro_orig_out"], '"y"'],
-                        ["set", "__cv_macro_orig_out", '"n"'],
-                    ]
-                )
-                + "\n"
-                + start
-            )
+            close = ";out ^__cv_macro_orig_out"
+            start = list2codev(macro_dict["get_out"]({})) + "\n" + start
         exp.pop(0)
     elif exp[0] in ["print", "format", "wri"]:
-        start = (
-            list2codev(
-                [
-                    "if",
-                    ["database", "out"],
-                    ["set", ["str", "__cv_macro_orig_out"], '"y"'],
-                    ["set", "__cv_macro_orig_out", '"n"'],
-                ]
-            )
-            + "\nout y\n"
-            + "wri "
-        )
-        # start = "wri "
-        close = "\nout ^__cv_macro_orig_out"
+        start = list2codev(macro_dict["get_out"]({})) + "\nout y;" + "wri "
+        close = ";out ^__cv_macro_orig_out"
         exp.pop(0)
     elif exp[0] == "option":
         start = exp[1] + "\n"
@@ -422,7 +404,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             )
 
     elif exp[0] in (set(arith_trans.keys()) | set(arith_words)):
-        if len(exp) not in (3, 2) or exp[0] not in arith_trans.keys():
+        if len(exp) < 2:
             raise SyntaxError(
                 "Arithmetic statement must be of the form (arith arg1 arg2): "
                 + str(exp)
@@ -430,21 +412,23 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         if len(exp) == 2:
             return f"{exp[0]} {list2codev(exp[1], scope=scope, indent=0)}"
 
+        if len(exp) > 3:
+            return list2codev([exp[0], exp[1], [exp[0], *exp[2:]]])
+
         if (
-            (
-                arith_trans[exp[0]] == ".."
-                or (isinstance(exp[1], list) and exp[1][0] != "var")
-                or (len(exp[1]) == 2 and special_letter_match(exp[1][0]))
-            )
-            and (arith_trans[exp[0]] not in bool_list)
-        ) or (
-            (scope == "aut")
-            and (
-                (exp[1][0] == "cmd")
-                if (not isinstance(exp[1], str) and len(exp[1]) > 1)
-                else False
-            )
-        ):
+            arith_trans[exp[0]] == ".."
+            # or (isinstance(exp[1], list) and exp[1][0] != "var")
+            or (len(exp[1]) == 2 and special_letter_match(exp[1][0]))
+        ) and (arith_trans[exp[0]] not in bool_list):
+            dist = 0
+        elif (scope == "aut") and (arith_trans[exp[0]] in bool_list):
+            dist = 0
+            exp[1].insert(0, "cmd") if (
+                exp[1][0] != "cmd" and isinstance(exp[1], list)
+            ) and exp[1][0] not in (
+                set(arith_trans.keys()) | set(arith_words)
+            ) else None
+        elif (scope == "aut") and (isinstance(exp[1], str) and exp[1][0] == "@"):
             dist = 0
 
         else:
@@ -453,14 +437,14 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             ["", ""]
             if isinstance(exp[1], str)
             or not len(exp[1]) == 3
-            or not exp[1][0] in arith_trans.keys()
+            or (not exp[1][0] in arith_trans.keys() or scope == "aut")
             else "()"
         )
         parentflag2 = (
             ["", ""]
             if isinstance(exp[2], str)
             or not len(exp[2]) == 3
-            or not exp[2][0] in arith_trans.keys()
+            or (not exp[2][0] in arith_trans.keys() or scope == "aut")
             else "()"
         )
         return f"{'(' if dist!=0 else ''}{parentflag1[0]}{list2codev(exp[1],indent=0,scope=scope) if not isinstance(exp[1],str) or not attr_match(exp[1]) else exp[1]}{parentflag1[1]}{' '*dist}{arith_trans[exp[0]]}{' '*dist}{parentflag2[0]}{list2codev(exp[2],indent=0,scope=scope) if not isinstance(exp[2],str) or not attr_match(exp[2]) else exp[2]}{parentflag2[1]}{')' if dist!=0 else ''}"
@@ -721,24 +705,15 @@ def expand_macro(program_input):
     if len(buf_empty_macro.findall(program)) > 0:
         program = buf_empty_macro.sub(
             list2codev(
-                [
-                    ["set", ["num", r"\1"], "1"],
-                    [
-                        "while",
-                        ["not", ["database", "buf.emp", ["b", ["var", r"\1"]]]],
-                        ["set", r"\1", ["+", ["var", r"\1"], "1"]],
-                    ],
-                    [
-                        "setd",
-                        [
-                            "buf",
-                            "put",
-                            ["b", ["var", r"\1"]],
-                            ["raw", '"il+1"'],
-                        ],
-                        ":placeover",
-                    ],
-                ]
+                liseq_to_list(
+                    r"(set (num \1) 1)"
+                    r"(while"
+                    r" (not (database buf.emp (b (var \1))))"
+                    r"(set \1 (+ (var \1) 1)))"
+                    "(setd "
+                    r'(buf put(bd (var \1))(raw "il+1"))'
+                    " :placeover)"
+                )
             ),
             program,
         )
@@ -746,23 +721,21 @@ def expand_macro(program_input):
     if len(codev_supress_macro.findall(program)) > 0:
         program = codev_supress_macro.sub(
             list2codev(
-                [
-                    [
-                        "if",
-                        ["database", "out"],
-                        ["set", ["str", "__suppress_orig_out"], '"y"'],
-                        ["set", "__suppress_orig_out", '"n"'],
-                    ],
-                    ["set", ["str", "__suppress_out"], '"n"'],
-                    ["setd", "out", ["var", "__suppress_out"]],
-                    [
-                        "if",
-                        ["database", "ver"],
-                        ["set", ["str", "__suppress_orig_ver"], '"y"'],
-                        ["set", "__suppress_orig_ver", '"n"'],
-                    ],
-                    ["setd", "ver", "n"],
-                ]
+                liseq_to_list(
+                    (
+                        "(if"
+                        " (database out)"
+                        ' (set (str __suppress_orig_out) "y")'
+                        ' (set __suppress_orig_out "n"))'
+                        '(set (str __suppress_out) "n")'
+                        "(setd out (var __suppress_out))"
+                        "(if"
+                        " (database ver)"
+                        ' (set (str __suppress_orig_ver) "y")'
+                        ' (set __suppress_orig_ver "n"))'
+                        "(setd ver n)"
+                    )
+                )
             ),
             program,
         )
@@ -771,14 +744,12 @@ def expand_macro(program_input):
     lblend = f"{newline.join([list2codev(['setd',['buf', 'del'], ['b', ['var',x]]]) for x in buf_empty_macro.findall(program_start)])}"
     if codev_supress_macro.findall(program_start) != []:
         add_out = list2codev(
-            [
-                ["setd", "out", ["var", "__suppress_orig_out"]],
-                [
-                    "if",
-                    ["==", ["var", "__suppress_orig_ver"], '"y"'],
-                    ["setd", "ver", "y"],
-                ],
-            ]
+            liseq_to_list(
+                "(setd out (var __suppress_orig_out))"
+                "(if"
+                ' (== (var __suppress_orig_ver) "y")'
+                " (setd ver y))"
+            )
         )
         lblend = f"{lblend}\n{add_out}"
     if findall("lbl __codev_end", program):
