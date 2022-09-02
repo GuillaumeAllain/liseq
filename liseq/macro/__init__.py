@@ -34,3 +34,7 @@ macro_dict = {
     "get_out": get_out,
     "codev.export": export,
 }
+
+macro_dict_raw = {
+    "get_out": open_file(f"{macro_dir}/codev_get_out.liseq"),
+}

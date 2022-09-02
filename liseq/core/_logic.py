@@ -3,7 +3,7 @@ __version__ = "1.0"
 from pyparsing.helpers import alphas
 from re import sub, compile, findall, search, escape, MULTILINE
 from copy import copy
-from liseq.macro import macro_dict
+from liseq.macro import macro_dict, macro_dict_raw
 from liseq.util import liseq_to_list
 
 loop_words = ["for", "while", "unt"]
@@ -29,7 +29,7 @@ keywords = ["yes", "no", "n", "y", "true", "false", "if", "else", "m", "t"]
 arith_symbols = [
     x for x in [sub(f"[{alphas}]+", "", y) for y in arith_trans.keys()] if x
 ]
-special_letter_match = lambda exp: bool(compile(r"[abcefgijolqrstuwz]$").match(exp))
+special_letter_match = lambda exp: bool(compile(r"[abcefgijolqrstuwzL]$").match(exp))
 attr_match = lambda exp: bool(compile(r"[\dacilos]$").match(exp))
 string_match = lambda exp: not exp == exp.replace('"', "") or exp.startswith(":")
 
@@ -289,10 +289,14 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         close = " "
         if "cv_macro" in exp[1]:
             close = ";out ^__cv_macro_orig_out"
-            start = list2codev(macro_dict["get_out"]({})) + "\n" + start
+            start = list2codev(macro_dict["get_out"]({}), indent=indent) + "\n" + start
         exp.pop(0)
     elif exp[0] in ["print", "format", "wri"]:
-        start = list2codev(macro_dict["get_out"]({})) + "\nout y;" + "wri "
+        start = (
+            list2codev(macro_dict["get_out"]({}), indent=indent)
+            + f"\n{indent_whitespace(indent)}out y;"
+            + "wri "
+        )
         close = ";out ^__cv_macro_orig_out"
         exp.pop(0)
     elif exp[0] == "option":
@@ -453,9 +457,11 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         if len(exp) < 2:
             raise SyntaxError("Arguments must be larger 2: " + exp)
         if len(exp) == 2:
-            return f"{exp[0]}{exp[1] if isinstance(exp[1], str) and special_letter_match(exp[1]) else list2codev(exp[1])}"
+            return f"{'L' if exp[0] == 'l' else exp[0]}{exp[1] if isinstance(exp[1], str) and special_letter_match(exp[1]) else list2codev(exp[1])}"
         elif exp[0] == "s":
             return f"{exp[0]} {' '.join([list2codev(x) for x in exp[1:]])}"
+        elif exp[0] == "l":
+            return f"L{' '.join([list2codev(x) for x in exp[1:]])}"
         else:
             raise SyntaxError("Not a known case for single letter expression" + exp)
     else:
@@ -494,207 +500,58 @@ def expand_macro(program_input):
         parse_inputs[2] = [f"""{x.replace('"', "")}""" for x in parse_inputs[2]]
         program = codev_parse_input.sub(
             list2codev(
-                [
-                    ["setd", "buf.emp.find", "^parsebufinput"],
-                    ["setd", "buf.emp.find", "^parsebufsyntax"],
-                    ["setd", ["buf", "del"], ["b", "^parsebufsyntax"]],
-                    [
-                        "setd",
+                liseq_to_list(
+                    "(setd buf.emp.find (var parsebufinput))"
+                    "(setd buf.emp.find (var parsebufsyntax))"
+                    "(setd (buf del) (b (var parsebufsyntax)))"
+                    "(setd (buf put (b (var parsebufsyntax)) (il+1) (j 1)) "
+                    f""""syntax: {parse_func_name} {' '.join([f'[{x}]' for x in parse_inputs[2]])}"""
+                    '<----- uses text qualifiers entered in any order")'
+                    "(setd (buf put (b (var parsebufsyntax)) (il+1) (j 1)) "
+                    '"      - or - ")'
+                    "(setd (buf put (b (var parsebufsyntax)) (il+1) (j 1)) "
+                    f""""syntax: {parse_func_name} {' '.join([f'{x}' for x in parse_inputs[2]])}"""
+                    '<----- uses numeric inputs in this order only ")'
+                    "(setd (buf del) (b (var parsebufinput)))"
+                    f"(for (i 1 {str(len(parse_inputs) - 2)})"
+                    "(setd (buf put (b (var parsebufinput)) (il+1)) (nth (var i) rfstr)))"
+                    "(require `cv_macro:ParseInputs (var parsebufinput))"
+                    "(for"
+                    "(i 1 (database buf.lst (b (var parsebufinput))))"
+                    "(set (str parseinput) (database buf.str (b (var parsebufinput)) (i (var i)) (j 1)))"
+                    "(set (str parsequalifier) (database buf.str (b (var parsebufinput)) (i (var i)) (j 2)))"
+                    "(set (num parsevalue) (call str_to_num "
+                    " (database buf.str (b (var parsebufinput)) (i (var i)) (j 3))))"
+                    "(if"
+                    '(or (eq (call upcase (var parseinput)) "H") (eq (call upcase (var parseinput)) "HELP"))'
+                    f"({macro_dict_raw['get_out']} (out y) (setd (buf lis nol) (b (var parsebufsyntax)))"
+                    " (out (var __codev_orig_out)) (goto __codev_end))"
+                    + "".join(
                         [
-                            "buf",
-                            "put",
-                            ["b", "^parsebufsyntax"],
-                            ["raw", '"il+1"'],
-                            ["j", "1"],
-                        ],
-                        f'''"syntax: {parse_func_name} {' '.join([f'[{x}]' for x in parse_inputs[2]])} <----- uses text qualifiers entered in any order"''',
-                    ],
-                    [
-                        "setd",
+                            rf"""((eq (var parsequalifier) "{x.upper().replace('"','')}"))"""
+                            f"(set (num {y}) (var parsevalue))"
+                            for x, y in zip(parse_inputs[0], parse_inputs[1])
+                        ]
+                    )
+                    + '(eq (var parsequalifier) "IsNum")'
+                    + "(if"
+                    + "".join(
                         [
-                            "buf",
-                            "put",
-                            ["b", "^parsebufsyntax"],
-                            ["raw", '"il+1"'],
-                            ["j", "1"],
-                        ],
-                        '"      - or - "',
-                    ],
-                    [
-                        "setd",
-                        [
-                            "buf",
-                            "put",
-                            ["b", "^parsebufsyntax"],
-                            ["raw", '"il+1"'],
-                            ["j", "1"],
-                        ],
-                        f'''"syntax: {parse_func_name} {' '.join(parse_inputs[2])} <----- uses numeric inputs in this order only "''',
-                    ],
-                    ["setd", ["buf", "del"], ["b", "^parsebufinput"]],
-                    [
-                        "for",
-                        ["i", "1", str(len(parse_inputs) - 2)],
-                        [
-                            "setd",
-                            [
-                                "buf",
-                                "put",
-                                ["b", "^parsebufinput"],
-                                ["raw", '"il+1"'],
-                            ],
-                            ["nth", ["var", "i"], "rfstr"],
-                        ],
-                    ],
-                    # ["wri", ["database", "buf", "^parsebufinput", "il"]],
-                    [
-                        "in",
-                        '"cv_macro:ParseInputs.seq"',
-                        ["var", "parsebufinput"],
-                    ],
-                    [
-                        "for",
-                        ["i", "1", ["database", "buf.lst", ["b", "^parsebufinput"]]],
-                        [
-                            "set",
-                            [
-                                "str",
-                                "parseinput",
-                            ],
-                            [
-                                "database",
-                                "buf.str",
-                                ["b", "^parsebufinput"],
-                                ["i", "^i"],
-                                ["j", "1"],
-                            ],
-                        ],
-                        [
-                            "set",
-                            [
-                                "str",
-                                "parsequalifier",
-                            ],
-                            [
-                                "database",
-                                "buf.str",
-                                ["b", "^parsebufinput"],
-                                ["i", "^i"],
-                                ["j", "2"],
-                            ],
-                        ],
-                        [
-                            "set",
-                            [
-                                "num",
-                                "parsevalue",
-                            ],
-                            [
-                                "call",
-                                "str_to_num",
-                                [
-                                    "database",
-                                    "buf.str",
-                                    ["b", "^parsebufinput"],
-                                    ["i", "^i"],
-                                    ["j", "3"],
-                                ],
-                            ],
-                        ],
-                        [
-                            "if",
-                            [
-                                "or",
-                                [
-                                    "==",
-                                    ["call", "upcase", ["var", "parseinput"]],
-                                    '"H"',
-                                ],
-                                [
-                                    "==",
-                                    ["call", "upcase", ["var", "parseinput"]],
-                                    '"HELP"',
-                                ],
-                            ],
-                            [
-                                ["setd", "out", "y"],
-                                ["print"],
-                                [
-                                    "setd",
-                                    ["buf", "lis", "nol"],
-                                    ["b", "^parsebufsyntax"],
-                                ],
-                                ["goto", "__codev_end"],
-                            ],
-                            *[
-                                item
-                                for sublist in zip(
-                                    [
-                                        [
-                                            "==",
-                                            "^parsequalifier",
-                                            rf'''"{x.upper().replace('"','')}"''',
-                                        ]
-                                        for x in parse_inputs[0]
-                                    ],
-                                    [
-                                        ["set", ["num", y], "^parsevalue"]
-                                        for y in parse_inputs[1]
-                                    ],
-                                )
-                                for item in sublist
-                            ],
-                            ["==", "^parsequalifier", '"IsNum"'],
-                            [
-                                "if",
-                                *[
-                                    item
-                                    for sublist in zip(
-                                        [
-                                            ["==", "^i", str(x + 1)]
-                                            for x in range(len(parse_inputs[1]))
-                                        ],
-                                        [
-                                            ["set", x, "^parsevalue"]
-                                            for x in parse_inputs[1]
-                                        ],
-                                    )
-                                    for item in sublist
-                                ],
-                            ],
-                            [
-                                ["setd", "ver", "n"],
-                                ["setd", "out", "y"],
-                                ["print"],
-                                [
-                                    "set",
-                                    [
-                                        "num",
-                                        "result",
-                                    ],
-                                    ["call", "cverror", '"Unrecognized input"', "0"],
-                                ],
-                                [
-                                    "print",
-                                    [
-                                        "call",
-                                        "concat",
-                                        '"Invalid input: "',
-                                        "^parseinput",
-                                    ],
-                                ],
-                                ["print"],
-                                [
-                                    "setd",
-                                    ["buf", "lis", "nol"],
-                                    ["b", "^parsebufsyntax"],
-                                ],
-                                ["print"],
-                                ["goto", "__codev_end"],
-                            ],
-                        ],
-                    ],
-                ]
+                            rf"""((eq (var i) {(str(i+1))}))"""
+                            f"(set (num {x}) (var parsevalue))"
+                            for i, x in enumerate(parse_inputs[1])
+                        ]
+                    )
+                    + ")"
+                    f"({macro_dict_raw['get_out']}"
+                    '(set (num result) (call cverror "Unrecognized input" 0))'
+                    '(print (call concat "Invalid input: " (var parseinput)) )'
+                    "(out y)"
+                    "(setd (buf lis nol) (b (var parsebufsyntax)))"
+                    "(out (var __codev_orig_out))"
+                    "(goto __codev_end)"
+                    ")))"
+                ),
             ),
             program,
         )
@@ -711,7 +568,7 @@ def expand_macro(program_input):
                     r" (not (database buf.emp (b (var \1))))"
                     r"(set \1 (+ (var \1) 1)))"
                     "(setd "
-                    r'(buf put(bd (var \1))(raw "il+1"))'
+                    r'(buf put (b (var \1)) (raw "il+1"))'
                     " :placeover)"
                 )
             ),
@@ -763,12 +620,16 @@ def move_def_to_top(program_input):
     program = copy(program_input)
     lclstr = compile(r"^\s*lcl\sstr.*", MULTILINE)
     lclnum = compile(r"^\s*lcl\snum.*", MULTILINE)
+    gblstr = compile(r"^\s*gbl\sstr.*", MULTILINE)
+    gblnum = compile(r"^\s*gbl\snum.*", MULTILINE)
     drofct = compile(r"^\s*dro\sfct.*", MULTILINE)
     # lclfctget = compile(r"(^\s*fct.*)", MULTILINE)
     # fct_local_get = lclfctget.findall(program)
 
     str_def = lclstr.findall(program)
     num_def = lclnum.findall(program)
+    gstr_def = gblstr.findall(program)
+    gnum_def = gblnum.findall(program)
     drofct_def = drofct.findall(program)
     definitions = (
         f"lcl str {' '.join(set([y for x in str_def for y in x.split()[2:]]))}\n"
@@ -781,6 +642,16 @@ def move_def_to_top(program_input):
         else ""
     )
     definitions += (
+        f"gbl str {' '.join(set([y for x in gstr_def for y in x.split()[2:]]))}\n"
+        if len(gstr_def) > 0
+        else ""
+    )
+    definitions += (
+        f"gbl num {' '.join(set([y for x in gnum_def for y in x.split()[2:]]))}\n"
+        if len(gnum_def) > 0
+        else ""
+    )
+    definitions += (
         f"dro fct {' '.join(set([y for x in drofct_def for y in x.split()[2:]]))}\n"
         if len(drofct_def) > 0
         else ""
@@ -790,9 +661,7 @@ def move_def_to_top(program_input):
         first_line = program.split("\n")[0]
         program = sub(escape(first_line), "", program)
         definitions = first_line + "\n" + definitions
-    program = (
-        f"""{definitions}{drofct.sub("",lclnum.sub("", lclstr.sub("", program)))}"""
-    )
+    program = f"""{definitions}{drofct.sub("",lclnum.sub("", lclstr.sub("", gblstr.sub("",gblnum.sub("",program)))))}"""
     fct_local_get = findall(r"(^\s*fct.*)", program, MULTILINE)
     fct_local_get = fct_local_get
     fct_index = [
