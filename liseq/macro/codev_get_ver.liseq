@@ -1,0 +1,3 @@
+(if (database ver)
+    (set (str __cv_macro_orig_ver) :y)
+    (set __cv_macro_orig_ver :n))

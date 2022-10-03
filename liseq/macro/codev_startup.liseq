@@ -1,9 +1,8 @@
+(codev.suppressoutput)
 (if (database out) (set (str __liseq_startup_orig_out) :y)
     (set __liseq_startup_orig_out :n))
 
-(out n)
 (rec n)
-(ver n)
 
 ;; System dimensions (mm)
 (dim m)
@@ -30,3 +29,4 @@
 
 (ver n)
 (out t :data/codev.lis)
+(out n)
