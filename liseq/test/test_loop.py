@@ -50,8 +50,8 @@ class Loop_test(unittest.TestCase):
 
     def test_chained_if(self):
         self.assertEqual(
-            "if (^foo = 3)\n    if (^foo = 2)\n        wri true\n    end if\nend if",
-            transpiler("(if (== ^foo 3) (if (== (var foo) 2) (print true)))"),
+            "if (^foo = 3)\n    if (^foo = 2)\n        ^foo == true\n    end if\nend if",
+            transpiler("(if (== ^foo 3) (if (== (var foo) 2) (set foo true)))"),
         )
 
     def test_for_empty(self):
@@ -59,16 +59,16 @@ class Loop_test(unittest.TestCase):
 
     def test_for_args(self):
         self.assertEqual(
-            "for ^i 1 10 3\n    wri 4\n    ^foovar == 3\nend for",
-            transpiler("(for [^i 1 10 3] (print 4) (set (var foovar) 3))"),
+            "for ^i 1 10 3\n    ^foo == 4\n    ^foovar == 3\nend for",
+            transpiler("(for [^i 1 10 3] (set foo 4) (set (var foovar) 3))"),
         )
 
     def test_chained_for_args(self):
         self.assertEqual(
             "if true\n    for ^i 1 10 3"
-            "\n        wri 4\n        ^foovar == 3"
+            "\n        ^foo == 4\n        ^foovar == 3"
             "\n    end for\nend if",
-            transpiler("(if true (for [(var i) 1 10 3] (print 4) (set ^foovar 3)))"),
+            transpiler("(if true (for [(var i) 1 10 3] (set foo 4) (set ^foovar 3)))"),
         )
 
     # def test_unt(self):
@@ -103,10 +103,10 @@ class Loop_test(unittest.TestCase):
         )
         self.assertEqual(
             "fct @test(num ^arg1(10), str ^arg2(3))\n"
-            "    wri 3\n    (x r1 s1)\n"
+            "    ^foo == 3\n    (x r1 s1)\n"
             "end fct ^outputvar",
             transpiler(
-                "(fct test ((num (. 10 arg1))(str (nth 3 arg2))) (print 3) (database x (r 1) (s 1)) (outputvar))"
+                "(fct test ((num (. 10 arg1))(str (nth 3 arg2))) (set foo 3) (database x (r 1) (s 1)) (outputvar))"
             ),
         )
         self.assertEqual(
@@ -115,13 +115,13 @@ class Loop_test(unittest.TestCase):
                 "    lcl num ^scope1 ^scope2(3,4)\n"
                 "    lcl str ^scope3\n"
                 '    ^scope3 == "test"\n'
-                "    wri 3\n    (x r1 s1)\n"
+                "    foo^ == 3\n    (x r1 s1)\n"
                 "end fct ^outputvar"
             ),
             sorted(
                 transpiler(
                     "(fct test ((num (nth arg1 10))(str (nth arg2 3)))"
-                    ' (local num scope1 (. scope2 3 4))(setq (str scope3) "test")(print 3)(database x r1 s1) (outputvar))'
+                    ' (local num scope1 (. scope2 3 4))(setq (str scope3) "test")(set foo 3)(database x r1 s1) (outputvar))'
                 )
             ),
         )
