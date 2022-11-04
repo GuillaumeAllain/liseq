@@ -12,6 +12,10 @@ def liseq_to_list(program):
     return ast
 
 
+def list_depth(L):
+    return isinstance(L, list) and max(map(list_depth, L)) + 1
+
+
 def open_file(filename):
     with open(filename, "r") as f:
         return f.read()
