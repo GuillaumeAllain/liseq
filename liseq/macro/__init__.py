@@ -61,9 +61,10 @@ def parseinputs(x):
     parse_inputs = list(zip(*parse_inputs))
     parse_func_name = x["__codev_arg1"]
 
+    rfd_string = "''"
     return (
         liseq_to_list(
-            '(rfd "")'
+            f'(rfd {" ".join([rfd_string for x in range(len(parse_inputs[0]))])})'
             "(codev.findbuf (var parsebufinput))"
             "(codev.findbuf (var parsebufsyntax))"
             "(setd (buf del) (b (var parsebufsyntax)))"
@@ -76,7 +77,7 @@ def parseinputs(x):
             f""""syntax: {parse_func_name} {' '.join([f'{x}' for x in parse_inputs[2]])}"""
             '<----- uses numeric inputs in this order only ")'
             "(setd (buf del) (b (var parsebufinput)))"
-            f"(for (i 1 {str(len(parse_inputs) - 2)})"
+            f"(for (i 1 {str(len(parse_inputs[0]))})"
             "(setd (buf put (b (var parsebufinput)) (il+1)) (nth (var i) rfstr)))"
             "(require `cv_macro:ParseInputs (var parsebufinput))"
             "(for"
