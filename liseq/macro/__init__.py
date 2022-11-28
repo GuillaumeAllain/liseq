@@ -45,6 +45,18 @@ def outbuf(x):
     return return_list
 
 
+def templens(x):
+    arg_2_to_n = list(x.keys())
+    arg_2_to_n.sort()
+    arg_2_to_n = arg_2_to_n
+    y = {"__codev_arg1": "__codev_arg1"}
+    return_list = liseq_to_list(
+        open_file(f"{macro_dir}/codev_templens.liseq").format(**y)
+    )
+    return_list[return_list.index("__codev_arg1")] = [x[ii] for ii in arg_2_to_n]
+    return return_list
+
+
 def findbuf(x):
     if type(x["__codev_arg1"]) is list:
         x["__codev_arg1"] = f'({" ".join(x["__codev_arg1"])})'
@@ -58,13 +70,14 @@ def parseinputs(x):
     for args in parse_inputs:
         args[2] = args[2].replace("(", "").replace(")", "")
         args[2] = args[2].replace('"', "").replace('"', "")
+        if len(args) != 4:
+            args.append('""')
     parse_inputs = list(zip(*parse_inputs))
     parse_func_name = x["__codev_arg1"]
 
-    rfd_string = "''"
     return (
         liseq_to_list(
-            f'(rfd {" ".join([rfd_string for x in range(len(parse_inputs[0]))])})'
+            f"(rfd {' '.join([x for x in parse_inputs[3]])})"
             "(codev.findbuf (var parsebufinput))"
             "(codev.findbuf (var parsebufsyntax))"
             "(setd (buf del) (b (var parsebufsyntax)))"
@@ -137,6 +150,7 @@ macro_dict = {
     ),
     "codev.parseinputs": parseinputs,
     "codev.parseinput": parseinputs,
+    "codev.templens": templens,
 }
 
 macro_dict_raw = {
