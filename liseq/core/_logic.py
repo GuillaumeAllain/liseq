@@ -6,6 +6,7 @@ from copy import copy
 from liseq.macro import macro_dict, macro_dict_raw
 from liseq.util import liseq_to_list
 
+set_words = ["APE", "EPD", "FNO", "NA", "NAO", "CIG", "VIX", "VIY"]
 loop_words = ["for", "while", "unt"]
 bool_list = ["=", "<=", ">=", ">", "<", "and", "or", "<>"]
 arith_words = bool_list + [
@@ -23,8 +24,12 @@ for words in arith_words:
 # arith_trans["eq"] = "="
 arith_trans["from"] = ".."
 arith_trans["to"] = ".."
+# arith_trans["leq"] = "<="
+# arith_trans["geq"] = ">="
 arith_trans.update(dict.fromkeys(["~=", "not=", "neq"], "<>"))
 arith_trans.update(dict.fromkeys(["==", "eq"], "="))
+arith_trans.update(dict.fromkeys(["<=", "leq"], "<="))
+arith_trans.update(dict.fromkeys([">=", "geq"], ">="))
 keywords = ["yes", "no", "n", "y", "true", "false", "if", "else", "m", "t"]
 arith_symbols = [
     x for x in [sub(f"[{alphas}]+", "", y) for y in arith_trans.keys()] if x
@@ -36,6 +41,7 @@ string_match = lambda exp: not exp == exp.replace('"', "") or exp.startswith(":"
 
 plt_options = ["vie", "fie", "rim", "foo", "fma"]
 ras_options = ["v3d"]
+END_ACC = ""
 
 
 def is_number(s):
@@ -70,6 +76,7 @@ def indent_whitespace(number):
 
 
 def list2codev(exp_input, indent=0, scope="lcl"):
+    global END_ACC
     exp = copy(exp_input)
     start = ""
     close = ""
@@ -108,15 +115,22 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         return " ".join(exp[1:])
     elif exp[0] in ["tset"]:
         # FIXME: Tablename (var quelquechos)
+        shape = None
         if isinstance(exp[1], str):
             exp[1] = [
                 exp[1],
+            ]
+        elif isinstance(exp[1], list) and exp[1][0] in ["nth", "."]:
+            shape = exp[1][1:-1]
+            exp[1] = [
+                exp[1][-1],
             ]
         if isinstance(exp[2], str):
             exp[2] = [
                 exp[2],
             ]
-        if isinstance(exp[2][0], str):
+
+        if isinstance(exp[2][0], str) or (shape is not None and len(shape) == 1):
             return list2codev(
                 [
                     [
@@ -128,7 +142,9 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                         ]
                         for ei, e in enumerate(exp[1])
                     ]
-                ]
+                ],
+                scope=scope,
+                indent=indent,
             )
         elif isinstance(exp[2][0], list):
             return list2codev(
@@ -143,13 +159,17 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                                     else [],
                                     list2codev(x[yi]),
                                 ]
+                                if list2codev(x[yi]).strip() != ""
+                                else ""
                                 for xi, x in enumerate(exp[2])
                             ]
                             for yi in range(len(exp[2][0]))
                         ]
                         for ei, e in enumerate(exp[1])
                     ]
-                ]
+                ],
+                scope=scope,
+                indent=indent,
             )
     elif exp[0] in ["arg"]:
         if len(exp) < 2:
@@ -183,6 +203,8 @@ def list2codev(exp_input, indent=0, scope="lcl"):
     elif exp[0] in ["set", "setq"]:
         if len(exp[1:]) % 2:
             raise SyntaxError("Cannot parse set statement: " + str(exp))
+        if type(exp[1]) is str and exp[1].upper() in set_words:
+            return "set " + list2codev(exp[1:])
         output_string = ""
         for var, val in zip(exp[1::2], exp[2::2]):
             if isinstance(var, list) and len(var) >= 2 and var[0] in ["num", "str"]:
@@ -386,6 +408,10 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         exp.pop(0)
         indent += 1
 
+    elif exp[0] == "end":
+        END_ACC += f"{list2codev(exp[1:])}\n"
+        return ""
+
     elif "dro" in exp[0]:
         if len(exp) < 3:
             raise SyntaxError("Cannot parse drop")
@@ -407,11 +433,11 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         if len(exp) < 2:
             raise SyntaxError("Cannot parse if")
         if len(exp) == 2:
-            return f"if {list2codev(exp[1],scope=scope)}\n{indent_whitespace(indent)}end if"
+            return f"\n{indent_whitespace(indent)}if {list2codev(exp[1],scope=scope)}\n{indent_whitespace(indent)}end if"
 
         if len(exp) % 2:
             return (
-                f"if {list2codev(exp[1],scope=scope)}\n{indent_whitespace(indent+1)}{list2codev(exp[2], indent=indent+1,scope=scope)}\n"
+                f"\n{indent_whitespace(indent)}if {list2codev(exp[1],scope=scope)}\n{indent_whitespace(indent+1)}{list2codev(exp[2], indent=indent+1,scope=scope)}\n"
                 # + "\n".join(exp[2])
                 + "\n".join(
                     [
@@ -429,7 +455,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             )
         elif not len(exp) % 2:
             return (
-                f"if {list2codev(exp[1],scope=scope)}\n{indent_whitespace(indent+1)}{list2codev(exp[2],indent+1,scope=scope)}\n"
+                f"\n{indent_whitespace(indent)}if {list2codev(exp[1],scope=scope)}\n{indent_whitespace(indent+1)}{list2codev(exp[2],indent=indent+1,scope=scope)}\n"
                 + "\n".join(
                     [
                         indent_whitespace(indent)
@@ -531,143 +557,96 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         return f"{start}{f'{join}'.join(exp_up)}{close}".strip()
 
 
-def expand_macro(program_input):
-    program = copy(program_input)
-    codev_parse_input = compile(r"codev.parseinput(.*)")
-    # (codev.parseinput func_name (s svar "[sk]"))
-    if len(codev_parse_input.findall(program)) > 0:
-        parse_inputs = findall(
-            r'(?:"[\w\s]+")|(?:\w+)', codev_parse_input.findall(program)[0]
-        )
-        if bool((len(parse_inputs) - 1) % 3):
-            raise SyntaxError("Parse Inputs error")
-        parse_func_name = parse_inputs[0].replace('"', "")
-        parse_inputs = [parse_inputs[1:][x::3] for x in range(3)]
-        parse_inputs[2] = [f"""{x.replace('"', "")}""" for x in parse_inputs[2]]
-        program = codev_parse_input.sub(
-            list2codev(
-                liseq_to_list(
-                    "(setd buf.emp.find (var parsebufinput))"
-                    "(setd buf.emp.find (var parsebufsyntax))"
-                    "(setd (buf del) (b (var parsebufsyntax)))"
-                    "(setd (buf put (b (var parsebufsyntax)) (il+1) (j 1)) "
-                    f""""syntax: {parse_func_name} {' '.join([f'[{x}]' for x in parse_inputs[2]])}"""
-                    '<----- uses text qualifiers entered in any order")'
-                    "(setd (buf put (b (var parsebufsyntax)) (il+1) (j 1)) "
-                    '"      - or - ")'
-                    "(setd (buf put (b (var parsebufsyntax)) (il+1) (j 1)) "
-                    f""""syntax: {parse_func_name} {' '.join([f'{x}' for x in parse_inputs[2]])}"""
-                    '<----- uses numeric inputs in this order only ")'
-                    "(setd (buf del) (b (var parsebufinput)))"
-                    f"(for (i 1 {str(len(parse_inputs) - 2)})"
-                    "(setd (buf put (b (var parsebufinput)) (il+1)) (nth (var i) rfstr)))"
-                    "(require `cv_macro:ParseInputs (var parsebufinput))"
-                    "(for"
-                    "(i 1 (database buf.lst (b (var parsebufinput))))"
-                    "(set (str parseinput) (database buf.str (b (var parsebufinput)) (i (var i)) (j 1)))"
-                    "(set (str parsequalifier) (database buf.str (b (var parsebufinput)) (i (var i)) (j 2)))"
-                    "(set (num parsevalue) (call str_to_num "
-                    " (database buf.str (b (var parsebufinput)) (i (var i)) (j 3))))"
-                    "(if"
-                    '(or (eq (call upcase (var parseinput)) "H") (eq (call upcase (var parseinput)) "HELP"))'
-                    f"({macro_dict_raw['codev.get_out']} (out y) (setd (buf lis nol) (b (var parsebufsyntax)))"
-                    " (out (var __codev_orig_out)) (goto __codev_end))"
-                    + "".join(
-                        [
-                            rf"""((eq (var parsequalifier) "{x.upper().replace('"','')}"))"""
-                            f"(set (num {y}) (var parsevalue))"
-                            for x, y in zip(parse_inputs[0], parse_inputs[1])
-                        ]
-                    )
-                    + '(eq (var parsequalifier) "IsNum")'
-                    + "(if"
-                    + "".join(
-                        [
-                            rf"""((eq (var i) {(str(i+1))}))"""
-                            f"(set (num {x}) (var parsevalue))"
-                            for i, x in enumerate(parse_inputs[1])
-                        ]
-                    )
-                    + ")"
-                    f"({macro_dict_raw['codev.get_out']}"
-                    '(set (num result) (call cverror "Unrecognized input" 0))'
-                    '(print (call concat "Invalid input: " (var parseinput)) )'
-                    "(out y)"
-                    "(setd (buf lis nol) (b (var parsebufsyntax)))"
-                    "(out (var __codev_orig_out))"
-                    "(goto __codev_end)"
-                    ")))"
-                ),
-            ),
-            program,
-        )
-        program = f'rfd ""\n{program}'
-    program_start = copy(program)
-
-    buf_empty_macro = compile(r"buf.emp.find\s\^(.*)")
-    if len(buf_empty_macro.findall(program)) > 0:
-        program = buf_empty_macro.sub(
-            list2codev(
-                liseq_to_list(
-                    r"(set (num \1) 1)"
-                    r"(while"
-                    r" (not (database buf.emp (b (var \1))))"
-                    r"(set \1 (+ (var \1) 1)))"
-                    "(setd "
-                    r'(buf put (b (var \1)) (raw "il+1"))'
-                    " :placeover)"
-                )
-            ),
-            program,
-        )
-    codev_supress_macro = compile(r"codev\.suppressoutput.*")
-    if len(codev_supress_macro.findall(program)) > 0:
-        program = codev_supress_macro.sub(
-            list2codev(
-                liseq_to_list(
-                    (
-                        "(if"
-                        " (database out)"
-                        ' (set (str __suppress_orig_out) "y")'
-                        ' (set __suppress_orig_out "n"))'
-                        '(set (str __suppress_out) "n")'
-                        "(setd out (var __suppress_out))"
-                        "(if"
-                        " (database ver)"
-                        ' (set (str __suppress_orig_ver) "y")'
-                        " (setd ver n))"
-                    )
-                )
-            ),
-            program,
-        )
-
-    newline = "\n"
-    lblend = f"{newline.join([list2codev(['setd',['buf', 'del'], ['b', ['var',x]]]) for x in buf_empty_macro.findall(program_start)])}"
-    if codev_supress_macro.findall(program_start) != []:
-        add_out = list2codev(
-            liseq_to_list(
-                "(setd out (var __suppress_orig_out))"
-                "(if"
-                ' (== (var __suppress_orig_ver) "y")'
-                " (setd ver y) (setd ver n))"
-            )
-        )
-        lblend = f"{lblend}\n{add_out}"
-    if findall("lbl __codev_end", program):
-        program = sub("lbl __codev_end", f"lbl __codev_end\n{lblend}", program)
-    else:
-        program = f"{program}\nlbl __codev_end\n{lblend}" if lblend != "" else program
-    return program
+# def expand_macro(program_input):
+#     program = copy(program_input)
+#     codev_parse_input = compile(r"codev.parseinput(.*)")
+#     # (codev.parseinput func_name (s svar "[sk]"))
+#     if len(codev_parse_input.findall(program)) > 0:
+#         parse_inputs = findall(
+#             r'(?:"[\w\s]+")|(?:\w+)', codev_parse_input.findall(program)[0]
+#         )
+#         if bool((len(parse_inputs) - 1) % 3):
+#             raise SyntaxError("Parse Inputs error")
+#         parse_func_name = parse_inputs[0].replace('"', "")
+#         parse_inputs = [parse_inputs[1:][x::3] for x in range(3)]
+#         parse_inputs[2] = [f"""{x.replace('"', "")}""" for x in parse_inputs[2]]
+#         print(parse_func_name)
+#         print(parse_inputs)
+#         program = codev_parse_input.sub(
+#             list2codev(
+#                 liseq_to_list(
+#                     '(rfd "")'
+#                     "(setd buf.emp.find (var parsebufinput))"
+#                     "(setd buf.emp.find (var parsebufsyntax))"
+#                     "(setd (buf del) (b (var parsebufsyntax)))"
+#                     "(setd (buf put (b (var parsebufsyntax)) (il+1) (j 1)) "
+#                     f""""syntax: {parse_func_name} {' '.join([f'[{x}]' for x in parse_inputs[2]])}"""
+#                     '<----- uses text qualifiers entered in any order")'
+#                     "(setd (buf put (b (var parsebufsyntax)) (il+1) (j 1)) "
+#                     '"      - or - ")'
+#                     "(setd (buf put (b (var parsebufsyntax)) (il+1) (j 1)) "
+#                     f""""syntax: {parse_func_name} {' '.join([f'{x}' for x in parse_inputs[2]])}"""
+#                     '<----- uses numeric inputs in this order only ")'
+#                     "(setd (buf del) (b (var parsebufinput)))"
+#                     f"(for (i 1 {str(len(parse_inputs) - 2)})"
+#                     "(setd (buf put (b (var parsebufinput)) (il+1)) (nth (var i) rfstr)))"
+#                     "(require `cv_macro:ParseInputs (var parsebufinput))"
+#                     "(for"
+#                     "(i 1 (database buf.lst (b (var parsebufinput))))"
+#                     "(set (str parseinput) (database buf.str (b (var parsebufinput)) (i (var i)) (j 1)))"
+#                     "(set (str parsequalifier) (database buf.str (b (var parsebufinput)) (i (var i)) (j 2)))"
+#                     "(set (num parsevalue) (call str_to_num "
+#                     " (database buf.str (b (var parsebufinput)) (i (var i)) (j 3))))"
+#                     "(if"
+#                     '(or (eq (call upcase (var parseinput)) "H") (eq (call upcase (var parseinput)) "HELP"))'
+#                     f"({macro_dict_raw['codev.get_out']} (out y) (setd (buf lis nol) (b (var parsebufsyntax)))"
+#                     " (out (var __codev_orig_out)) (goto __codev_end))"
+#                     + "".join(
+#                         [
+#                             rf"""((eq (var parsequalifier) "{x.upper().replace('"','')}"))"""
+#                             f"(set (num {y}) (var parsevalue))"
+#                             for x, y in zip(parse_inputs[0], parse_inputs[1])
+#                         ]
+#                     )
+#                     + '(eq (var parsequalifier) "IsNum")'
+#                     + "(if"
+#                     + "".join(
+#                         [
+#                             rf"""((eq (var i) {(str(i+1))}))"""
+#                             f"(set (num {x}) (var parsevalue))"
+#                             for i, x in enumerate(parse_inputs[1])
+#                         ]
+#                     )
+#                     + ")"
+#                     f"({macro_dict_raw['codev.get_out']}"
+#                     '(set (num result) (call cverror "Unrecognized input" 0))'
+#                     '(print (call concat "Invalid input: " (var parseinput)) )'
+#                     "(out y)"
+#                     "(setd (buf lis nol) (b (var parsebufsyntax)))"
+#                     "(out (var __codev_orig_out))"
+#                     "(goto __codev_end)"
+#                     ")))"
+#                 ),
+#             ),
+#             program,
+#         )
+#     return program
 
 
 def move_def_to_top(program_input):
     program = copy(program_input)
+    if findall("lbl __codev_end", program):
+        program = sub("lbl __codev_end", f"lbl __codev_end\n{END_ACC}", program)
+    else:
+        program = (
+            f"{program}\nlbl __codev_end\n{END_ACC}" if END_ACC != "" else f"{program}"
+        )
     lclstr = compile(r"^\s*lcl\sstr.*", MULTILINE)
     lclnum = compile(r"^\s*lcl\snum.*", MULTILINE)
     gblstr = compile(r"^\s*gbl\sstr.*", MULTILINE)
     gblnum = compile(r"^\s*gbl\snum.*", MULTILINE)
     drofct = compile(r"^\s*dro\sfct.*", MULTILINE)
+    rfdstate = compile(r"^\s*rfd.*", MULTILINE)
     # lclfctget = compile(r"(^\s*fct.*)", MULTILINE)
     # fct_local_get = lclfctget.findall(program)
 
@@ -676,6 +655,7 @@ def move_def_to_top(program_input):
     gstr_def = gblstr.findall(program)
     gnum_def = gblnum.findall(program)
     drofct_def = drofct.findall(program)
+    rfdstate_def = rfdstate.findall(program)
     definitions = (
         f"lcl str {' '.join(set([y for x in str_def for y in x.split()[2:]]))}\n"
         if len(str_def) > 0
@@ -701,6 +681,9 @@ def move_def_to_top(program_input):
         if len(drofct_def) > 0
         else ""
     )
+    program = rfdstate.sub("", program)
+    if len(rfdstate_def) > 0:
+        program = f"{rfdstate_def[0].strip()}\n{program}"
 
     if search("rfd.*", program.split("\n")[0]):
         first_line = program.split("\n")[0]
@@ -742,4 +725,4 @@ def move_def_to_top(program_input):
 
 def transpiler(program):
     ast = liseq_to_list(program)
-    return move_def_to_top(expand_macro(list2codev(ast)))
+    return move_def_to_top(list2codev(ast))

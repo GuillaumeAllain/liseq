@@ -1,0 +1,7 @@
+(set (num {__codev_arg1}) 1)
+(while (not (database buf.emp (b (var {__codev_arg1}))))
+  (set {__codev_arg1} (+ (var {__codev_arg1}) 1)))
+
+(setd (buf put (b (var {__codev_arg1})) (raw :il+1)) :placeover)
+
+(end (buf del (b (var {__codev_arg1}))))
