@@ -4,4 +4,4 @@
 
 (setd (buf put (b (var {__codev_arg1})) (raw :il+1)) :placeover)
 
-(end (buf del (b (var {__codev_arg1}))))
+(codev.end (buf del (b (var {__codev_arg1}))))

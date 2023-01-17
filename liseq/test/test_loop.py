@@ -112,8 +112,8 @@ class Loop_test(unittest.TestCase):
         self.assertEqual(
             sorted(
                 "fct @test(num ^arg1(10), str ^arg2(3))\n"
-                "    lcl num ^scope1 ^scope2(3,4)\n"
-                "    lcl str ^scope3\n"
+                "    num ^scope1 ^scope2(3,4)\n"
+                "    str ^scope3\n"
                 '    ^scope3 == "test"\n'
                 "    foo^ == 3\n    (x r1 s1)\n"
                 "end fct ^outputvar"

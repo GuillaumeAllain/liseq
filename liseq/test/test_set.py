@@ -70,17 +70,17 @@ class Set_test(unittest.TestCase):
         )
         self.assertEqual(
             "fct @test(num ^arg1(10), str ^arg2(3))\n"
-            "    lcl num ^outputvar\n    ^outputvar == 0\n"
+            "    num ^outputvar\n    ^outputvar == 0\n"
             "end fct ^outputvar",
             transpiler(
-                "(defun test ((num (nth 10 arg1))(str (nth 3 arg2))) (setq (num outputvar) 0) (outputvar))"
+                "(defun test ((num (nth 10 arg1)) (str (nth 3 arg2))) (setq (num outputvar) 0) (outputvar))"
             ),
         )
         self.assertEqual(
             sorted(
                 "fct @test(num ^arg1(10), str ^arg2(3))\n"
-                "    lcl num ^scope1 ^scope2(3,4)\n"
-                "    lcl str ^scope3\n"
+                "    num ^scope1 ^scope2(3,4)\n"
+                "    str ^scope3\n"
                 '    ^scope3 == "test"\n'
                 "end fct ^outputvar"
             ),

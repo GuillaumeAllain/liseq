@@ -1,6 +1,6 @@
 (set (str __cv_macro_temp_lens_filename) (database fil))
-(save __cv_macro_temp_lens)
+(save {__cv_macro_temp_lens_filename})
 {__codev_arg1}
-(res __cv_macro_temp_lens)
-(end (rfn (var __cv_macro_temp_lens_filename))
-     (option lib (del :__cv_macro_temp_lens.*.len)))
+(res {__cv_macro_temp_lens_filename})
+(codev.end (rfn (var __cv_macro_temp_lens_filename))
+     (option lib (del :{__cv_macro_temp_lens_filename}.*.len)))

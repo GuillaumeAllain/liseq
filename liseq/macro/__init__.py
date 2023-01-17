@@ -1,5 +1,9 @@
 from pathlib import Path
 from liseq.util import open_file, liseq_to_list
+from random import randint
+from hashlib import md5
+
+# TODO: more robust random for file name
 
 macro_dir = Path(__file__).parent
 
@@ -49,12 +53,52 @@ def templens(x):
     arg_2_to_n = list(x.keys())
     arg_2_to_n.sort()
     arg_2_to_n = arg_2_to_n
-    y = {"__codev_arg1": "__codev_arg1"}
+    random_string = md5(str(x).encode()).hexdigest()[:10]
+    random_string = str(randint(0, 9999)).zfill(4) + random_string
+    y = {
+        "__codev_arg1": "__codev_arg1",
+        "__cv_macro_temp_lens_filename": f"__cv_macro_temp_lens_{random_string}",
+    }
     return_list = liseq_to_list(
         open_file(f"{macro_dir}/codev_templens.liseq").format(**y)
     )
     return_list[return_list.index("__codev_arg1")] = [x[ii] for ii in arg_2_to_n]
     return return_list
+
+
+def nooutput(x):
+    arg_2_to_n = list(x.keys())
+    arg_2_to_n.sort()
+    arg_2_to_n = arg_2_to_n
+    y = {"__codev_arg1": "__codev_arg1"}
+    return_list = liseq_to_list(
+        open_file(f"{macro_dir}/codev_nooutput.liseq").format(**y)
+    )
+    return_list[return_list.index("__codev_arg1")] = [x[ii] for ii in arg_2_to_n]
+    return return_list
+
+def output(x):
+    arg_2_to_n = list(x.keys())
+    arg_2_to_n.sort()
+    arg_2_to_n = arg_2_to_n
+    y = {"__codev_arg1": "__codev_arg1"}
+    return_list = liseq_to_list(
+        open_file(f"{macro_dir}/codev_output.liseq").format(**y)
+    )
+    return_list[return_list.index("__codev_arg1")] = [x[ii] for ii in arg_2_to_n]
+    return return_list
+
+
+def codestacktop(x):
+    arg_2_to_n = list(x.keys())
+    arg_2_to_n.sort()
+    return ["codestacktop"] + [x[ii] for ii in arg_2_to_n]
+
+
+def codestackbottom(x):
+    arg_2_to_n = list(x.keys())
+    arg_2_to_n.sort()
+    return ["codestackbottom"] + [x[ii] for ii in arg_2_to_n]
 
 
 def findbuf(x):
@@ -132,10 +176,6 @@ def parseinputs(x):
     )
 
 
-# salut
-# [['s'], ['svar'], ['sk']]
-
-
 macro_dict = {
     "codev.rename_fig": rename_fig,
     "codev.startup": startup,
@@ -151,6 +191,11 @@ macro_dict = {
     "codev.parseinputs": parseinputs,
     "codev.parseinput": parseinputs,
     "codev.templens": templens,
+    "codev.output": output,
+    "codev.nooutput": nooutput,
+    "codev.top": codestacktop,
+    "codev.end": codestackbottom,
+    "codev.bottom": codestackbottom,
 }
 
 macro_dict_raw = {
