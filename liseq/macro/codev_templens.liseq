@@ -2,5 +2,5 @@
 (save {__cv_macro_temp_lens_filename})
 {__codev_arg1}
 (res {__cv_macro_temp_lens_filename})
-(codev.end (rfn (var __cv_macro_temp_lens_filename))
-     (option lib (del :{__cv_macro_temp_lens_filename}.*.len)))
+(codev.nooutput [(rfn (var __cv_macro_temp_lens_filename))
+            (option lib (del :{__cv_macro_temp_lens_filename}.*.len))])

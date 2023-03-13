@@ -12,7 +12,7 @@
                           (del :fig/codev.*.ras)
                           (del :data/codev.*.lis)
                           (del :fig/codev.*.eps)])
-                 (sys "del cvtempfunc*.seq >nul 2>&1")
+                 ;; (sys "del cvtempfunc*.seq >nul 2>&1")
                  (sys "md fig >nul 2>&1")
                  (sys "md data >nul 2>&1")
                  ;; Dont print date/time on graphics
@@ -25,6 +25,7 @@
                  ;; Define eps output
                  (dev plt cepsfile)
                  (dev ras cepsfile)
-                 (ver n)
-                 (out t :data/codev.lis)
-                 (out n)])
+                 (out t :data/codev.lis)])
+
+(out n)
+(ver n)

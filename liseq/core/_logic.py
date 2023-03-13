@@ -6,7 +6,9 @@ from copy import copy
 from liseq.macro import macro_dict, macro_dict_raw
 from liseq.util import liseq_to_list
 from hashlib import md5
+import math
 
+constants = {"pi": math.pi}
 set_words = ["CAP", "APE", "EPD", "FNO", "NA", "NAO", "CIG", "VIX", "VIY"]
 loop_words = ["for", "while", "unt"]
 bool_list = ["=", "<=", ">=", ">", "<", "><", "and", "or", "<>"]
@@ -95,6 +97,8 @@ def list2codev(exp_input, indent=0, scope="lcl"):
 
         if exp == "nil":
             return ""
+        if exp in constants.keys():
+            return constants[exp]
         elif arith_bool and not (exp.startswith("`") or exp.startswith("'")):
             return list2codev(arith_output)
         else:
@@ -186,6 +190,14 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             scope=scope,
             indent=indent,
         )
+    elif "vary" in exp[0]:
+        exp.insert(0, "cmd")
+        exp[1] = "var"
+        return list2codev(exp)
+    elif "freeze" in exp[0]:
+        exp.insert(0, "raw")
+        exp[1] = "frz"
+        return list2codev(exp)
     elif exp[0] in ["var"]:
         if len(exp) < 2:
             raise SyntaxError("Var statement should at least contain one variable")
@@ -211,7 +223,11 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             return "set " + list2codev(exp[1:])
         output_string = ""
         for var, val in zip(exp[1::2], exp[2::2]):
-            if isinstance(var, list) and len(var) >= 2 and var[0] in ["num", "str"]:
+            if (
+                isinstance(var, list)
+                and len(var) >= 2
+                and var[0] in ["num", "str", "img"]
+            ):
                 output_string += (
                     list2codev(var, scope=scope) + "\n" + indent_whitespace(indent)
                 )
@@ -248,7 +264,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
     elif exp[0] == "database":
         return f'({" ".join([x if isinstance(x, str) else list2codev(x) for x in exp[1:]])})'
 
-    elif exp[0] in ["num", "str"]:
+    elif exp[0] in ["num", "str", "img"]:
         if len(exp) < 2:
             raise SyntaxError(
                 "Var definition should at minimum include type and name (type name): "
@@ -259,8 +275,8 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         else:
             return list2codev(["local"] + exp, scope=scope)
 
-    elif exp[0] in ("local", "global"):
-        start = f"{exp[0].replace('global', 'gbl').replace('local', 'lclaut' if 'aut' in scope else ('fctlcl' if 'fct' in scope else 'lcl'))} "
+    elif exp[0] in ("local", "global", "shared", "gbl", "lcl", "shr"):
+        start = f"{exp[0].replace('shared', 'shr').replace('global', 'gbl').replace('local', 'lclaut' if 'aut' in scope else ('fctlcl' if 'fct' in scope else 'lcl'))} "
         start += f"{exp[1]} "
         exp.pop(0)
         exp.pop(0)
@@ -338,6 +354,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                             ],
                             ["clo", "U^filefunctemp"],
                             ["require", f":{tempfilename}"],
+                            ["option", "lib", ["del", f"{tempfilename}.seq"]],
                         ],
                     ],
                 ],
@@ -390,28 +407,38 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         if len(exp) < 2:
             raise SyntaxError(f"Cannot parse load statement: {str(exp)}")
         start = "in "
-        close = " "
-        if "cv_macro" in exp[1]:
-            close = (
-                f";out ^__cv_macro_orig_out\n{indent_whitespace(indent)}"
-                + list2codev(
-                    liseq_to_list(
-                        "(if"
-                        ' (== (var __cv_macro_orig_ver) "y")'
-                        " (setd ver y) (setd ver n))",
-                    ),
-                    indent=indent,
-                )
+        # close = " "
+        if "cv_macro" in exp[1] and "cvmacro" not in scope:
+            return list2codev(
+                [
+                    "codev.nooutput",
+                    [
+                        exp,
+                    ],
+                ],
+                scope=scope + "cvmacro",
+                indent=indent,
             )
+            # close = (
+            #     f";out ^__cv_macro_orig_out\n{indent_whitespace(indent)}"
+            #     + list2codev(
+            #         liseq_to_list(
+            #             "(if" ' (== (var __cv_macro_orig_ver) "y")' " (ver y) (ver n))",
+            #         ),
+            #         indent=indent,
+            #     )
+            # )
 
-            start = (
-                list2codev(macro_dict["codev.get_out"]({}), indent=indent)
-                + f"\n{indent_whitespace(indent)}"
-                + list2codev(macro_dict["codev.get_ver"]({}), indent=indent)
-                + f"\n{indent_whitespace(indent)}"
-                + start
-            )
+            # start = (
+            #     list2codev(macro_dict["codev.get_out"]({}), indent=indent)
+            #     + f"\n{indent_whitespace(indent)}"
+            #     + list2codev(macro_dict["codev.get_ver"]({}), indent=indent)
+            #     + f"\n{indent_whitespace(indent)}"
+            #     + start
+            # )
         exp.pop(0)
+    elif exp[0] in ["silent"]:
+        return list2codev(["print"]+exp[1:], scope=scope+"noout", indent=indent)
     elif exp[0] in ["print", "format", "wri"]:
         start = (
             (
@@ -500,12 +527,22 @@ def list2codev(exp_input, indent=0, scope="lcl"):
     elif "dro" in exp[0]:
         if len(exp) < 3:
             raise SyntaxError("Cannot parse drop")
-        if str(exp[1]).lower() not in ("fct", "gbl", "global", "local", "rec", "lcl"):
+        if str(exp[1]).lower() not in (
+            "fct",
+            "gbl",
+            "shr",
+            "shared",
+            "global",
+            "local",
+            "rec",
+            "lcl",
+        ):
             raise SyntaxError(
-                f'Second argument of drop must be in {str(["fct", "gbl", "global", "local", "rec", "lcl"])}'
+                f'Second argument of drop must be in {str(["fct", "gbl", "shr", "shared", "global", "local", "rec", "lcl"])}'
             )
         exp[1] = exp[1].replace("global", "gbl")
         exp[1] = exp[1].replace("local", "lcl")
+        exp[1] = exp[1].replace("shared", "shr")
 
         funcs = (
             f'{"@" if exp[1].lower() == "fct" else "^"}'
@@ -673,8 +710,10 @@ def move_drop_global_to_top(program_input):
     definitions = ""
     drofct = compile(r"^\s*dro\sfct.*", MULTILINE)
     drogbl = compile(r"^\s*dro\sgbl.*", MULTILINE)
+    droshr = compile(r"^\s*dro\sshr.*", MULTILINE)
     drofct_def = drofct.findall(program)
     drogbl_def = drogbl.findall(program)
+    droshr_def = droshr.findall(program)
     rfdstate = compile(r"^\s*rfd.*", MULTILINE)
     rfdstate_def = rfdstate.findall(program)
     droplistfct = (
@@ -693,6 +732,14 @@ def move_drop_global_to_top(program_input):
         if len(drogbl_def) > 0
         else list()
     )
+    droplistshr = (
+        [
+            "raw",
+            f"dro shr {' '.join(set([y for x in droshr_def for y in x.split()[2:]]))}\n",
+        ]
+        if len(droshr_def) > 0
+        else list()
+    )
     if droplistfct != list() or droplistgbl != list():
         definitions += list2codev(
             [
@@ -700,6 +747,7 @@ def move_drop_global_to_top(program_input):
                 [
                     droplistfct if droplistfct != list() else list(),
                     droplistgbl if droplistgbl != list() else list(),
+                    droplistshr if droplistshr != list() else list(),
                 ],
             ]
         )
@@ -757,16 +805,26 @@ def move_def_to_top(program_input):
 
     lclstr = compile(r"^\s*lcl\sstr.*", MULTILINE)
     lclnum = compile(r"^\s*lcl\snum.*", MULTILINE)
+    lclimg = compile(r"^\s*lcl\simg.*", MULTILINE)
     gblstr = compile(r"^\s*gbl\sstr.*", MULTILINE)
     gblnum = compile(r"^\s*gbl\snum.*", MULTILINE)
+    gblimg = compile(r"^\s*gbl\simg.*", MULTILINE)
+    shrstr = compile(r"^\s*shr\sstr.*", MULTILINE)
+    shrnum = compile(r"^\s*shr\snum.*", MULTILINE)
+    shrimg = compile(r"^\s*shr\simg.*", MULTILINE)
     rfdstate = compile(r"^\s*rfd.*", MULTILINE)
     # lclfctget = compile(r"(^\s*fct.*)", MULTILINE)
     # fct_local_get = lclfctget.findall(program)
 
     str_def = lclstr.findall(program)
     num_def = lclnum.findall(program)
+    img_def = lclimg.findall(program)
     gstr_def = gblstr.findall(program)
     gnum_def = gblnum.findall(program)
+    gimg_def = gblimg.findall(program)
+    sstr_def = shrstr.findall(program)
+    snum_def = shrnum.findall(program)
+    simg_def = shrimg.findall(program)
     rfdstate_def = rfdstate.findall(program)
     definitions = (
         f"lcl str {' '.join(set([y for x in str_def for y in x.split()[2:]]))}\n"
@@ -779,6 +837,11 @@ def move_def_to_top(program_input):
         else ""
     )
     definitions += (
+        f"lcl img {' '.join(set([y for x in img_def for y in x.split()[2:]]))}\n"
+        if len(img_def) > 0
+        else ""
+    )
+    definitions += (
         f"gbl str {' '.join(set([y for x in gstr_def for y in x.split()[2:]]))}\n"
         if len(gstr_def) > 0
         else ""
@@ -786,6 +849,26 @@ def move_def_to_top(program_input):
     definitions += (
         f"gbl num {' '.join(set([y for x in gnum_def for y in x.split()[2:]]))}\n"
         if len(gnum_def) > 0
+        else ""
+    )
+    definitions += (
+        f"gbl img {' '.join(set([y for x in gimg_def for y in x.split()[2:]]))}\n"
+        if len(gimg_def) > 0
+        else ""
+    )
+    definitions += (
+        f"shr str {' '.join(set([y for x in sstr_def for y in x.split()[2:]]))}\n"
+        if len(sstr_def) > 0
+        else ""
+    )
+    definitions += (
+        f"shr num {' '.join(set([y for x in snum_def for y in x.split()[2:]]))}\n"
+        if len(snum_def) > 0
+        else ""
+    )
+    definitions += (
+        f"shr img {' '.join(set([y for x in simg_def for y in x.split()[2:]]))}\n"
+        if len(simg_def) > 0
         else ""
     )
 
@@ -802,7 +885,7 @@ def move_def_to_top(program_input):
         first_line = program.split("\n")[0]
         program = sub(escape(first_line), "", program)
         definitions = first_line + "\n" + definitions
-    program = f"""{definitions}\n{lclnum.sub("", lclstr.sub("", gblstr.sub("",gblnum.sub("",program))))}"""
+    program = f"""{definitions}\n{lclimg.sub("",lclnum.sub("", lclstr.sub("", gblstr.sub("",gblnum.sub("",gblimg.sub("",shrstr.sub("",shrnum.sub("",shrimg.sub("",program)))))))))}"""
     fct_local_get = findall(r"(^\s*fct.*)", program, MULTILINE)
     fct_local_get = fct_local_get
     fct_index = [
@@ -838,4 +921,4 @@ def move_def_to_top(program_input):
 
 def transpiler(program):
     ast = liseq_to_list(program)
-    return move_def_to_top(list2codev(ast))
+    return move_def_to_top(list2codev(ast)).strip()

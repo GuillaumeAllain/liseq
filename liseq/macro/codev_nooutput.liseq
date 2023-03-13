@@ -1,5 +1,9 @@
 (codev.get_out)
+(codev.get_ver)
 (if (neq (var __cv_macro_orig_out) "n") (out n))
+(if (neq (var __cv_macro_orig_ver) "n") (ver n))
 {__codev_arg1}
-(if (neq (var __cv_macro_orig_out) "n") (out y))
-
+(out n)
+(ver n)
+(if (eq (var __cv_macro_orig_out) "y") (out y))
+(if (eq (var __cv_macro_orig_ver) "y") (ver y))
