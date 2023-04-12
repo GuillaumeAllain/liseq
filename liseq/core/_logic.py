@@ -43,7 +43,7 @@ attr_match = lambda exp: bool(compile(r"[\dacilos]$").match(exp))
 string_match = lambda exp: not exp == exp.replace('"', "") or exp.startswith(":")
 
 
-plt_options = ["vie", "fie", "rim", "foo", "fma", "spo"]
+plt_options = ["vie", "fie", "rim", "foo", "fma", "pma", "spo"]
 ras_options = ["v3d"]
 BOTTOM_ACC = ""
 TOP_ACC = ""
@@ -438,7 +438,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             # )
         exp.pop(0)
     elif exp[0] in ["silent"]:
-        return list2codev(["print"]+exp[1:], scope=scope+"noout", indent=indent)
+        return list2codev(["print"] + exp[1:], scope=scope + "noout", indent=indent)
     elif exp[0] in ["print", "format", "wri"]:
         start = (
             (
