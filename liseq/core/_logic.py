@@ -6,6 +6,8 @@ from copy import copy
 from liseq.macro import macro_dict, macro_dict_raw
 from liseq.util import liseq_to_list
 from hashlib import md5
+from itertools import zip_longest
+from copy import deepcopy
 import math
 
 constants = {"pi": math.pi}
@@ -179,6 +181,88 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                 scope=scope,
                 indent=indent,
             )
+
+    elif exp[0] in ["zip"]:
+        if len(exp) < 3:
+            raise SyntaxError(f"Cannot parse zip statement: {str(exp)}")
+        exp.pop(0)
+        for ii, xx in enumerate(exp):
+            if exp[ii][0] in ("map", "mapcar"):
+                if ii == 0:
+                    exp[ii] = list2codev(exp[ii], scope=scope, indent=indent).split(
+                        "\n\n"
+                    )
+                else:
+                    exp[ii] = list2codev(exp[ii], scope=scope).split("\n\n")
+        return "\n\n".join([" ".join(xx) for xx in list(zip(*exp))])
+
+    elif exp[0] in ["map", "mapcar"]:
+        if len(exp) != 3:
+            raise SyntaxError(f"Cannot parse map statement: {str(exp)}")
+
+        return_list = []
+        if isinstance(exp[1], str) and string_match(exp[1]):
+            if exp[1].startswith(":") or exp[1].startswith("`"):
+                exp[1] = f'"{exp[1:]}"'
+            elif exp[1].startswith("'") or exp[1].startswith('"'):
+                exp[1] = f"{exp[1][1:-1]}"
+            exp[1] = liseq_to_list(exp[1])
+        elif isinstance(exp[1], list):
+            exp[1] = [
+                exp[1],
+            ]
+
+        preprocess = False
+        if exp[1][0][0] in ["zip"]:
+            exp[1][0] = [a.strip("") for a in list2codev(exp[1]).strip().split("\n\n")]
+            preprocess = True
+        elif exp[1][0][0] in ["map", "mapcar"]:
+            exp[1][0] = [list2codev(["map", exp[1][0][1], a]) for a in exp[1][0][2]]
+            preprocess = True
+
+        if exp[2][0] in ["zip"]:
+            exp[2] = [a.strip("") for a in list2codev(exp[2]).strip().split("\n\n")]
+        elif exp[2][0] in ["map", "mapcar"]:
+            exp[2] = [a.strip("") for a in list2codev(exp[2]).strip().split("\n\n")]
+
+        def find_sublist(lst):
+            if "#" in lst:
+                return lst.index("#")
+            elif isinstance(lst, list):
+                for i, a in enumerate(lst):
+                    answ = find_sublist(a)
+                    if answ:
+                        if isinstance(answ, int):
+                            return [i, answ]
+                        else:
+                            return [i, *answ]
+            else:
+                return False
+
+        answ = find_sublist(exp[1])
+        return_list = []
+        tempexp1 = deepcopy(exp[1])
+        join = False
+        if answ:
+            for ii, x in enumerate(exp[2]):
+                if (preprocess is True) and (len(tempexp1[0]) == len(exp[2])):
+                    temp_loc_start = deepcopy(tempexp1[0][ii])
+                else:
+                    temp_loc_start = deepcopy(tempexp1)
+                temp_loc = temp_loc_start
+                for y in answ[:-1]:
+                    temp_loc = temp_loc[y]
+                    if isinstance(temp_loc, list):
+                        temp_loc[answ[-1]] = x
+                        return_element = deepcopy(temp_loc_start)[0]
+                if isinstance(temp_loc, str):
+                    return_element = temp_loc_start.replace("#", x, 1)
+                    join = True
+                return_list.append(return_element)
+        if join is True:
+            return_list = ["raw", "\n\n".join(return_list)]
+        return list2codev(return_list, scope=scope, indent=indent)
+
     elif exp[0] in ["arg"]:
         if len(exp) < 2:
             raise SyntaxError("Arg statement should at least contain one variable")
@@ -282,7 +366,6 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         exp.pop(0)
         exp = [list2codev(["var"] + [x], scope=scope) for x in exp]
     elif exp[0] in ["nth", "."]:
-
         if len(exp) < 3:
             raise SyntaxError("Cannot parse array access: " + exp)
 
@@ -450,6 +533,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
         ) + "wri "
         close = ";out ^__cv_macro_orig_out" if "noout" not in scope else ""
         exp.pop(0)
+
     elif exp[0] == "option":
         start = exp[1] + "\n"
         join = "\n"
@@ -598,6 +682,10 @@ def list2codev(exp_input, indent=0, scope="lcl"):
                 + f"{indent_whitespace(indent)}end if"
             )
 
+    elif (
+        exp[0] in [x + "=" for x in list(set(arith_trans.keys()) | set(arith_words))]
+    ) and (exp[0] != "=="):
+        return list2codev(["set", exp[1], [exp[0][:-1], *exp[1:]]])
     elif exp[0] in (set(arith_trans.keys()) | set(arith_words)):
         if len(exp) < 2:
             raise SyntaxError(
@@ -630,7 +718,7 @@ def list2codev(exp_input, indent=0, scope="lcl"):
             exp[1].insert(0, "cmd") if (
                 exp[1][0] != "cmd"
                 and isinstance(exp[1], list)
-                and (not exp[1][0] == "callu")
+                and (not (exp[1][0] == "callu"))
             ) and exp[1][0] not in (
                 set(arith_trans.keys()) | set(arith_words)
             ) else None
